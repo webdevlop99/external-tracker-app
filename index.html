@@ -18,7 +18,6 @@
         .container-view {
             transition: opacity 0.3s ease-in-out;
         }
-        /* Custom styles for better table visibility */
         .table-container {
             border-radius: 0.75rem; /* rounded-xl */
             overflow: hidden;
@@ -32,26 +31,36 @@
     <!-- Firebase Imports -->
     <script type="module">
         import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
-        import { getAuth, signInAnonymously, signInWithCustomToken, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
+        import { getAuth, signInAnonymously, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
         import { getFirestore, doc, addDoc, onSnapshot, collection, query, serverTimestamp, setDoc, deleteDoc } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
         import { setLogLevel } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
 
         // Set Firebase Log Level to Debug
         setLogLevel('debug');
 
-        // Global variables provided by the Canvas environment
-        const appId = typeof __app_id !== 'undefined' ? __app_id : 'default-app-id';
-        const firebaseConfig = JSON.parse(typeof __firebase_config !== 'undefined' ? __firebase_config : '{}');
-        const initialAuthToken = typeof __initial_auth_token !== 'undefined' ? __initial_auth_token : null;
+        // =========================================================================
+        // IMPORTANT: MANUAL CONFIGURATION REQUIRED FOR PUBLIC HOSTING
+        // =========================================================================
+        // 1. You MUST replace this 'firebaseConfig' object with your own
+        //    Web App configuration from the Firebase Console.
+        const firebaseConfig = {
+            apiKey: "YOUR_API_KEY", // <-- REPLACE THIS
+            authDomain: "YOUR_AUTH_DOMAIN", // <-- REPLACE THIS
+            projectId: "YOUR_PROJECT_ID", // <-- REPLACE THIS
+            storageBucket: "YOUR_STORAGE_BUCKET", // <-- REPLACE THIS
+            messagingSenderId: "YOUR_MESSAGING_SENDER_ID", // <-- REPLACE THIS
+            appId: "YOUR_APP_ID" // <-- REPLACE THIS
+        };
+        // =========================================================================
 
         let db, auth, userId = null;
         let chartInstance = null;
         let allVessels = [];
-        const DUE_SOON_DAYS = 90; // 90 days for "Due Soon" threshold
+        const DUE_SOON_DAYS = 90; 
         const DUE_SOON_MS = DUE_SOON_DAYS * 24 * 60 * 60 * 1000;
-        let currentEditingId = null; // Stores the ID of the document being edited
+        let currentEditingId = null;
         
-        // Define standard colors and statuses for consistency
+        // Define standard colors and statuses
         const dateConfigs = {
             'Overdue': { color: '#ef4444', text: 'Overdue', icon: '🚨' }, // Red
             'Due Soon': { color: '#f59e0b', text: 'Due Soon', icon: '⚠️' }, // Orange
@@ -60,7 +69,7 @@
             'Not Required': { color: '#9ca3af', text: 'N/A', icon: '' } // Gray
         };
 
-        // --- Utility Functions ---
+        // --- Utility Functions (Only necessary ones included) ---
 
         /**
          * Converts Date object or string to 'YYYY-MM-DD' string.
@@ -81,8 +90,6 @@
 
         /**
          * Calculates the status of a single critical date (Expire or Intermediate Due).
-         * @param {string} dateString The date in 'YYYY-MM-DD' format.
-         * @returns {{status: string, color: string}} Status name and corresponding color.
          */
         function calculateDateStatus(dateString) {
             if (!dateString) return dateConfigs['Not Required'];
@@ -103,24 +110,18 @@
 
         /**
          * Calculates the status of an Intermediate Due date, considering completion status.
-         * @param {string} dateString The date in 'YYYY-MM-DD' format.
-         * @param {boolean} isCompleted If the intermediate audit has been completed.
-         * @returns {{status: string, color: string}} Status, color, and icon for display.
          */
         function getIntermediateStatus(dateString, isCompleted) {
             if (isCompleted) {
-                return dateConfigs['Completed']; // If marked completed, status is 'Completed'
+                return dateConfigs['Completed'];
             }
-            return calculateDateStatus(dateString); // Otherwise, calculate based on time
+            return calculateDateStatus(dateString);
         }
         
         /**
          * Aggregates the worst status across all critical dates for a vessel.
-         * @param {Object} vessel Vessel document.
-         * @returns {{status: string, color: string}} The most severe status found.
          */
         function getVesselOverallStatus(vessel) {
-            // Order of severity: Overdue (0) > Due Soon (1) > Active (2) > Completed (3) > Not Required/N/A (4)
             const severityOrder = { 'Overdue': 0, 'Due Soon': 1, 'Active': 2, 'Completed': 3, 'Not Required': 4 };
 
             const criticalStatuses = [
@@ -132,7 +133,6 @@
                 getIntermediateStatus(vessel.mlcIntermediateDue, vessel.mlcIntermediateCompleted),
             ];
 
-            // Filter out N/A dates, but keep Completed, Active, Overdue, Due Soon
             const relevantStatuses = criticalStatuses.filter(s => s.text !== 'N/A');
 
             if (relevantStatuses.length === 0) return dateConfigs['Not Required'];
@@ -141,15 +141,12 @@
             let overallColor = dateConfigs['Active'].color;
 
             relevantStatuses.forEach(statusObj => {
-                // If a current status is more severe (lower number) than the current overall status
                 if (severityOrder[statusObj.text] < severityOrder[overallStatus]) {
                     overallStatus = statusObj.text;
                     overallColor = statusObj.color;
                 }
             });
             
-            // If the worst status is 'Completed', we simplify the overall badge to 'Active' 
-            // since the completion is a good state. The only remaining date is the future expiration.
             if (overallStatus === 'Completed') overallStatus = 'Active';
 
             return { status: overallStatus, color: overallColor };
@@ -168,8 +165,6 @@
                 notification.style.transform = 'translateY(100px)';
             }, 3000);
         }
-
-        // --- Routing and View Management ---
 
         /**
          * Switches the active view (page).
@@ -191,7 +186,7 @@
             } else if (viewName === 'table') {
                 document.getElementById('tableView').classList.remove('hidden');
                 document.getElementById('tableLink').classList.add('font-bold', 'text-indigo-600');
-                exitEditMode(); // Ensure form resets if user navigates back to table
+                exitEditMode();
             }
         }
 
@@ -203,18 +198,14 @@
                 db = getFirestore(app);
                 auth = getAuth(app);
 
-                if (initialAuthToken) {
-                    await signInWithCustomToken(auth, initialAuthToken);
-                } else {
-                    await signInAnonymously(auth);
-                }
+                // Use anonymous sign-in for public hosting
+                await signInAnonymously(auth);
 
                 onAuthStateChanged(auth, (user) => {
                     if (user) {
                         userId = user.uid;
-                        document.getElementById('userIdDisplay').textContent = `User ID: ${userId}`;
+                        document.getElementById('userIdDisplay').textContent = `User ID: ${userId} (Anonymous)`;
                         listenForCertificateUpdates();
-                        // Default view is the table/dashboard
                         navigateTo('table');
                     } else {
                         console.error("User not authenticated.");
@@ -227,21 +218,32 @@
             }
         }
 
-        // --- Data Persistence (CRUD) ---
+        // --- Data Persistence (CRUD) - UPDATED PATHS ---
+
+        /**
+         * Determines the standard, non-Canvas collection path for the user's private data.
+         * @returns {string} The Firestore collection path.
+         */
+        function getUserCollectionPath() {
+            // Standard path: /users/{userId}/vessel_certificates
+            return `users/${userId}/vessel_certificates`;
+        }
+
 
         /**
          * Listens to Firestore for real-time updates to vessel certificates.
          */
         function listenForCertificateUpdates() {
             if (!db || !userId) return;
-            const collectionPath = `artifacts/${appId}/users/${userId}/vessel_certificates`;
+            // Use the standard, non-Canvas path
+            const collectionPath = getUserCollectionPath();
             const q = collection(db, collectionPath);
 
             onSnapshot(q, (snapshot) => {
                 allVessels = snapshot.docs.map(doc => ({
                     id: doc.id,
                     ...doc.data()
-                })).sort((a, b) => a.vesselName.localeCompare(b.vesselName)); // Sort by name
+                })).sort((a, b) => a.vesselName.localeCompare(b.vesselName));
 
                 renderTable(allVessels);
                 renderChart(allVessels);
@@ -260,26 +262,26 @@
             if (!db || !userId) return showNotification('Authentication not complete.', 'bg-yellow-500');
 
             const form = e.target;
-            const collectionPath = `artifacts/${appId}/users/${userId}/vessel_certificates`;
+            // Use the standard, non-Canvas path
+            const collectionPath = getUserCollectionPath();
 
-            // Collect data including the new intermediate completion status
             const entryData = {
                 vesselName: form.vesselName.value || 'Untitled Vessel',
                 // SMC Dates
                 smcIssued: form.smcIssued.value || null,
                 smcIntermediateDue: form.smcIntermediateDue.value || null,
                 smcExpire: form.smcExpire.value || null,
-                smcIntermediateCompleted: form.smcIntermediateCompleted.checked || false, // NEW
+                smcIntermediateCompleted: form.smcIntermediateCompleted.checked || false,
                 // ISPS Dates
                 ispsIssued: form.ispsIssued.value || null,
                 ispsIntermediateDue: form.ispsIntermediateDue.value || null,
                 ispsExpire: form.ispsExpire.value || null,
-                ispsIntermediateCompleted: form.ispsIntermediateCompleted.checked || false, // NEW
+                ispsIntermediateCompleted: form.ispsIntermediateCompleted.checked || false,
                 // MLC Dates
                 mlcIssued: form.mlcIssued.value || null,
                 mlcIntermediateDue: form.mlcIntermediateDue.value || null,
                 mlcExpire: form.mlcExpire.value || null,
-                mlcIntermediateCompleted: form.mlcIntermediateCompleted.checked || false, // NEW
+                mlcIntermediateCompleted: form.mlcIntermediateCompleted.checked || false,
             };
             
             try {
@@ -307,7 +309,8 @@
         async function deleteVesselEntry(id, name) {
             if (!db || !userId) return;
 
-            const collectionPath = `artifacts/${appId}/users/${userId}/vessel_certificates`;
+            // Use the standard, non-Canvas path
+            const collectionPath = getUserCollectionPath();
             const docRef = doc(db, collectionPath, id);
 
             try {
@@ -319,7 +322,6 @@
             }
         }
 
-        // --- Editing Functions ---
 
         /**
          * Populates the form with existing data and switches to edit mode.
@@ -340,19 +342,19 @@
             form.smcIssued.value = formatDate(data.smcIssued) !== 'N/A' ? formatDate(data.smcIssued) : '';
             form.smcIntermediateDue.value = formatDate(data.smcIntermediateDue) !== 'N/A' ? formatDate(data.smcIntermediateDue) : '';
             form.smcExpire.value = formatDate(data.smcExpire) !== 'N/A' ? formatDate(data.smcExpire) : '';
-            form.smcIntermediateCompleted.checked = !!data.smcIntermediateCompleted; // NEW
+            form.smcIntermediateCompleted.checked = !!data.smcIntermediateCompleted;
 
             // ISPS
             form.ispsIssued.value = formatDate(data.ispsIssued) !== 'N/A' ? formatDate(data.ispsIssued) : '';
             form.ispsIntermediateDue.value = formatDate(data.ispsIntermediateDue) !== 'N/A' ? formatDate(data.ispsIntermediateDue) : '';
             form.ispsExpire.value = formatDate(data.ispsExpire) !== 'N/A' ? formatDate(data.ispsExpire) : '';
-            form.ispsIntermediateCompleted.checked = !!data.ispsIntermediateCompleted; // NEW
+            form.ispsIntermediateCompleted.checked = !!data.ispsIntermediateCompleted;
             
             // MLC
             form.mlcIssued.value = formatDate(data.mlcIssued) !== 'N/A' ? formatDate(data.mlcIssued) : '';
             form.mlcIntermediateDue.value = formatDate(data.mlcIntermediateDue) !== 'N/A' ? formatDate(data.mlcIntermediateDue) : '';
             form.mlcExpire.value = formatDate(data.mlcExpire) !== 'N/A' ? formatDate(data.mlcExpire) : '';
-            form.mlcIntermediateCompleted.checked = !!data.mlcIntermediateCompleted; // NEW
+            form.mlcIntermediateCompleted.checked = !!data.mlcIntermediateCompleted;
         }
 
         /**
@@ -418,7 +420,6 @@
             `;
         }
 
-        // --- View Rendering ---
 
         /**
          * Renders the vessel data in a responsive table.
@@ -452,7 +453,7 @@
                             <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5 inline" viewBox="0 0 20 20" fill="currentColor"><path d="M13.586 3.586a2 2 0 112.828 2.828l-.793.793-2.828-2.828.793-.793zm-3.464 1.464L5 11.5V15h3.5l5.5-5.5-2.828-2.828z" /></svg>
                         </button>
                         <button data-id="${vessel.id}" data-name="${vessel.vesselName}" class="delete-btn text-red-600 hover:text-white p-2 rounded-full bg-red-100 hover:bg-red-600 transition duration-150 shadow-md">
-                            <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5 inline" viewBox="0 0 20 20" fill="currentColor"><path fill-rule="evenodd" d="M9 2a1 1 0 00-.894.553L7.382 4H4a1 1 0 000 2v10a2 2 0 002 2h8a2 2 0 002-2V6a1 1 0 100-2h-3.382l-.724-1.447A1 1 0 0011 2H9zM7 8a1 1 0 012 0v6a1 1 0 11-2 0V8zm5-1a1 1 0 00-1 1v6a1 1 0 102 0V8a1 1 0 00-1-1z" clip-rule="evenodd" /></svg>
+                            <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5 inline" viewBox="0 0 20 20" fill="currentColor"><path fill-rule="evenodd" d="M9 2a1 1 0 00-.894.553L7.382 4H4a1 1 0 000 2v10a2 2 0 002 2h8a2 2 0 002-2V6a1 1 0 100-2h-3.382l-.724-1.447A1 1 1 0 0011 2H9zM7 8a1 1 0 012 0v6a1 1 0 11-2 0V8zm5-1a1 1 0 00-1 1v6a1 1 0 102 0V8a1 1 0 00-1-1z" clip-rule="evenodd" /></svg>
                         </button>
                     </td>
                 `;
@@ -490,12 +491,11 @@
                 { date: 'mlcExpire' }
             ];
             
-            // We use the 'text' property from dateConfigs for keys
             const dateStatuses = {
                 'Overdue': { count: 0, color: dateConfigs.Overdue.color },
                 'Due Soon': { count: 0, color: dateConfigs['Due Soon'].color },
                 'Active': { count: 0, color: dateConfigs.Active.color },
-                'Completed': { count: 0, color: dateConfigs.Completed.color }, // Include Completed
+                'Completed': { count: 0, color: dateConfigs.Completed.color },
                 'N/A': { count: 0, color: dateConfigs['Not Required'].color }
             };
 
@@ -551,6 +551,7 @@
             });
         }
 
+
         // --- Initial Setup ---
 
         window.addEventListener('load', () => {
@@ -577,7 +578,7 @@
     <header class="max-w-7xl mx-auto mb-6 flex justify-between items-center border-b pb-3">
         <div>
             <h1 class="text-3xl font-extrabold text-gray-800">Maritime Compliance Hub</h1>
-            <p id="userIdDisplay" class="text-xs text-gray-500 mt-1">Authenticating...</p>
+            <p id="userIdDisplay" class="text-xs text-gray-500 mt-1">Authenticating (using Anonymous Sign-in)...</p>
         </div>
         <nav class="flex space-x-4 text-lg font-medium">
             <a href="#" id="formLink" class="text-gray-600 hover:text-indigo-600 transition">Add Vessel</a>
@@ -710,10 +711,10 @@
                     <h2 class="text-xl font-bold text-gray-700 mb-4 border-b pb-2">Vessel Certificates (SMC, ISPS, MLC)</h2>
                     <p class="text-sm text-gray-600 mb-3">
                         **Overall Status:** Reflects the single most critical outstanding date (Intermediate or Expire).
-                        <span class="font-bold" style="color: ${dateConfigs.Overdue.color};">${dateConfigs.Overdue.icon} Overdue</span>, 
-                        <span class="font-bold" style="color: ${dateConfigs['Due Soon'].color};">${dateConfigs['Due Soon'].icon} Due Soon</span> (within 90 days), 
-                        <span class="font-bold" style="color: ${dateConfigs.Completed.color};">${dateConfigs.Completed.icon} Completed</span>, 
-                        <span class="font-bold" style="color: ${dateConfigs.Active.color};">${dateConfigs.Active.icon} Active</span>.
+                        <span class="font-bold" style="color: #ef4444;">🚨 Overdue</span>, 
+                        <span class="font-bold" style="color: #f59e0b;">⚠️ Due Soon</span> (within 90 days), 
+                        <span class="font-bold" style="color: #1d4ed8;">✔ Completed</span>, 
+                        <span class="font-bold" style="color: #10b981;">✅ Active</span>.
                     </p>
                     <div class="flex space-x-4 text-xs font-semibold">
                         <span class="text-gray-600">Actions:</span>
