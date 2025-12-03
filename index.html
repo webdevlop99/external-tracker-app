@@ -1,0 +1,746 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Maritime Certificate Tracker</title>
+    <!-- Tailwind CSS CDN -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- Chart.js CDN for the Pie Chart -->
+    <script src="https://cdn.jsdelivr.net/npm/chart.js@3.7.1/dist/chart.min.js"></script>
+    <!-- Inter Font -->
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&display=swap" rel="stylesheet">
+    <style>
+        body {
+            font-family: 'Inter', sans-serif;
+            background-color: #f7f9fb;
+        }
+        .container-view {
+            transition: opacity 0.3s ease-in-out;
+        }
+        /* Custom styles for better table visibility */
+        .table-container {
+            border-radius: 0.75rem; /* rounded-xl */
+            overflow: hidden;
+            box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.1), 0 4px 6px -2px rgba(0, 0, 0, 0.05); /* shadow-2xl */
+        }
+        .table-sticky-header th {
+            top: 0;
+            z-index: 10;
+        }
+    </style>
+    <!-- Firebase Imports -->
+    <script type="module">
+        import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
+        import { getAuth, signInAnonymously, signInWithCustomToken, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
+        import { getFirestore, doc, addDoc, onSnapshot, collection, query, serverTimestamp, setDoc, deleteDoc } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
+        import { setLogLevel } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
+
+        // Set Firebase Log Level to Debug
+        setLogLevel('debug');
+
+        // Global variables provided by the Canvas environment
+        const appId = typeof __app_id !== 'undefined' ? __app_id : 'default-app-id';
+        const firebaseConfig = JSON.parse(typeof __firebase_config !== 'undefined' ? __firebase_config : '{}');
+        const initialAuthToken = typeof __initial_auth_token !== 'undefined' ? __initial_auth_token : null;
+
+        let db, auth, userId = null;
+        let chartInstance = null;
+        let allVessels = [];
+        const DUE_SOON_DAYS = 90; // 90 days for "Due Soon" threshold
+        const DUE_SOON_MS = DUE_SOON_DAYS * 24 * 60 * 60 * 1000;
+        let currentEditingId = null; // Stores the ID of the document being edited
+        
+        // Define standard colors and statuses for consistency
+        const dateConfigs = {
+            'Overdue': { color: '#ef4444', text: 'Overdue', icon: '🚨' }, // Red
+            'Due Soon': { color: '#f59e0b', text: 'Due Soon', icon: '⚠️' }, // Orange
+            'Active': { color: '#10b981', text: 'Active', icon: '✅' }, // Green
+            'Completed': { color: '#1d4ed8', text: 'Completed', icon: '✔' }, // Blue
+            'Not Required': { color: '#9ca3af', text: 'N/A', icon: '' } // Gray
+        };
+
+        // --- Utility Functions ---
+
+        /**
+         * Converts Date object or string to 'YYYY-MM-DD' string.
+         */
+        function formatDate(date) {
+            if (!date) return 'N/A';
+            if (date.toDate) date = date.toDate(); // Handle Firestore Timestamp
+            const d = new Date(date);
+            let month = '' + (d.getMonth() + 1);
+            let day = '' + d.getDate();
+            let year = d.getFullYear();
+
+            if (month.length < 2) month = '0' + month;
+            if (day.length < 2) day = '0' + day;
+
+            return [year, month, day].join('-');
+        }
+
+        /**
+         * Calculates the status of a single critical date (Expire or Intermediate Due).
+         * @param {string} dateString The date in 'YYYY-MM-DD' format.
+         * @returns {{status: string, color: string}} Status name and corresponding color.
+         */
+        function calculateDateStatus(dateString) {
+            if (!dateString) return dateConfigs['Not Required'];
+
+            const now = Date.now();
+            const targetDate = new Date(dateString).getTime();
+            const diff = targetDate - now;
+
+            if (targetDate < now) {
+                return dateConfigs['Overdue'];
+            }
+            if (diff <= DUE_SOON_MS) {
+                return dateConfigs['Due Soon'];
+            }
+
+            return dateConfigs['Active'];
+        }
+
+        /**
+         * Calculates the status of an Intermediate Due date, considering completion status.
+         * @param {string} dateString The date in 'YYYY-MM-DD' format.
+         * @param {boolean} isCompleted If the intermediate audit has been completed.
+         * @returns {{status: string, color: string}} Status, color, and icon for display.
+         */
+        function getIntermediateStatus(dateString, isCompleted) {
+            if (isCompleted) {
+                return dateConfigs['Completed']; // If marked completed, status is 'Completed'
+            }
+            return calculateDateStatus(dateString); // Otherwise, calculate based on time
+        }
+        
+        /**
+         * Aggregates the worst status across all critical dates for a vessel.
+         * @param {Object} vessel Vessel document.
+         * @returns {{status: string, color: string}} The most severe status found.
+         */
+        function getVesselOverallStatus(vessel) {
+            // Order of severity: Overdue (0) > Due Soon (1) > Active (2) > Completed (3) > Not Required/N/A (4)
+            const severityOrder = { 'Overdue': 0, 'Due Soon': 1, 'Active': 2, 'Completed': 3, 'Not Required': 4 };
+
+            const criticalStatuses = [
+                calculateDateStatus(vessel.smcExpire),
+                getIntermediateStatus(vessel.smcIntermediateDue, vessel.smcIntermediateCompleted),
+                calculateDateStatus(vessel.ispsExpire),
+                getIntermediateStatus(vessel.ispsIntermediateDue, vessel.ispsIntermediateCompleted),
+                calculateDateStatus(vessel.mlcExpire),
+                getIntermediateStatus(vessel.mlcIntermediateDue, vessel.mlcIntermediateCompleted),
+            ];
+
+            // Filter out N/A dates, but keep Completed, Active, Overdue, Due Soon
+            const relevantStatuses = criticalStatuses.filter(s => s.text !== 'N/A');
+
+            if (relevantStatuses.length === 0) return dateConfigs['Not Required'];
+
+            let overallStatus = 'Active';
+            let overallColor = dateConfigs['Active'].color;
+
+            relevantStatuses.forEach(statusObj => {
+                // If a current status is more severe (lower number) than the current overall status
+                if (severityOrder[statusObj.text] < severityOrder[overallStatus]) {
+                    overallStatus = statusObj.text;
+                    overallColor = statusObj.color;
+                }
+            });
+            
+            // If the worst status is 'Completed', we simplify the overall badge to 'Active' 
+            // since the completion is a good state. The only remaining date is the future expiration.
+            if (overallStatus === 'Completed') overallStatus = 'Active';
+
+            return { status: overallStatus, color: overallColor };
+        }
+
+        /**
+         * Displays a transient notification message.
+         */
+        function showNotification(message, bgColor) {
+            const notification = document.getElementById('notification');
+            notification.textContent = message;
+            notification.className = `fixed bottom-4 right-4 p-3 rounded-lg text-white shadow-lg z-50 transition-all duration-300 ${bgColor}`;
+            notification.style.transform = 'translateY(0)';
+
+            setTimeout(() => {
+                notification.style.transform = 'translateY(100px)';
+            }, 3000);
+        }
+
+        // --- Routing and View Management ---
+
+        /**
+         * Switches the active view (page).
+         */
+        function navigateTo(viewName, data = null) {
+            document.getElementById('formView').classList.add('hidden');
+            document.getElementById('tableView').classList.add('hidden');
+            document.getElementById('formLink').classList.remove('font-bold', 'text-indigo-600');
+            document.getElementById('tableLink').classList.remove('font-bold', 'text-indigo-600');
+
+            if (viewName === 'form') {
+                document.getElementById('formView').classList.remove('hidden');
+                document.getElementById('formLink').classList.add('font-bold', 'text-indigo-600');
+                if (data) {
+                    enterEditMode(data);
+                } else {
+                    exitEditMode();
+                }
+            } else if (viewName === 'table') {
+                document.getElementById('tableView').classList.remove('hidden');
+                document.getElementById('tableLink').classList.add('font-bold', 'text-indigo-600');
+                exitEditMode(); // Ensure form resets if user navigates back to table
+            }
+        }
+
+        // --- Firebase/Auth Initialization ---
+
+        async function initializeFirebase() {
+            try {
+                const app = initializeApp(firebaseConfig);
+                db = getFirestore(app);
+                auth = getAuth(app);
+
+                if (initialAuthToken) {
+                    await signInWithCustomToken(auth, initialAuthToken);
+                } else {
+                    await signInAnonymously(auth);
+                }
+
+                onAuthStateChanged(auth, (user) => {
+                    if (user) {
+                        userId = user.uid;
+                        document.getElementById('userIdDisplay').textContent = `User ID: ${userId}`;
+                        listenForCertificateUpdates();
+                        // Default view is the table/dashboard
+                        navigateTo('table');
+                    } else {
+                        console.error("User not authenticated.");
+                    }
+                });
+
+            } catch (error) {
+                console.error("Error initializing Firebase or authentication:", error);
+                showNotification(`Firebase Init Error: ${error.message}`, 'bg-red-500');
+            }
+        }
+
+        // --- Data Persistence (CRUD) ---
+
+        /**
+         * Listens to Firestore for real-time updates to vessel certificates.
+         */
+        function listenForCertificateUpdates() {
+            if (!db || !userId) return;
+            const collectionPath = `artifacts/${appId}/users/${userId}/vessel_certificates`;
+            const q = collection(db, collectionPath);
+
+            onSnapshot(q, (snapshot) => {
+                allVessels = snapshot.docs.map(doc => ({
+                    id: doc.id,
+                    ...doc.data()
+                })).sort((a, b) => a.vesselName.localeCompare(b.vesselName)); // Sort by name
+
+                renderTable(allVessels);
+                renderChart(allVessels);
+                showNotification(`Synced ${allVessels.length} vessel entries.`, 'bg-blue-500');
+            }, (error) => {
+                console.error("Error listening to Firestore:", error);
+                showNotification(`Data Sync Error: ${error.message}`, 'bg-red-500');
+            });
+        }
+
+        /**
+         * Handles form submission for adding or updating a vessel.
+         */
+        async function handleFormSubmit(e) {
+            e.preventDefault();
+            if (!db || !userId) return showNotification('Authentication not complete.', 'bg-yellow-500');
+
+            const form = e.target;
+            const collectionPath = `artifacts/${appId}/users/${userId}/vessel_certificates`;
+
+            // Collect data including the new intermediate completion status
+            const entryData = {
+                vesselName: form.vesselName.value || 'Untitled Vessel',
+                // SMC Dates
+                smcIssued: form.smcIssued.value || null,
+                smcIntermediateDue: form.smcIntermediateDue.value || null,
+                smcExpire: form.smcExpire.value || null,
+                smcIntermediateCompleted: form.smcIntermediateCompleted.checked || false, // NEW
+                // ISPS Dates
+                ispsIssued: form.ispsIssued.value || null,
+                ispsIntermediateDue: form.ispsIntermediateDue.value || null,
+                ispsExpire: form.ispsExpire.value || null,
+                ispsIntermediateCompleted: form.ispsIntermediateCompleted.checked || false, // NEW
+                // MLC Dates
+                mlcIssued: form.mlcIssued.value || null,
+                mlcIntermediateDue: form.mlcIntermediateDue.value || null,
+                mlcExpire: form.mlcExpire.value || null,
+                mlcIntermediateCompleted: form.mlcIntermediateCompleted.checked || false, // NEW
+            };
+            
+            try {
+                if (currentEditingId) {
+                    // Update existing document
+                    const docRef = doc(db, collectionPath, currentEditingId);
+                    await setDoc(docRef, entryData, { merge: true });
+                    showNotification(`Vessel ${entryData.vesselName} updated!`, 'bg-green-500');
+                    navigateTo('table');
+                } else {
+                    // Add new document
+                    await addDoc(collection(db, collectionPath), { ...entryData, createdAt: serverTimestamp() });
+                    showNotification(`New vessel ${entryData.vesselName} added!`, 'bg-green-500');
+                    form.reset();
+                }
+            } catch (error) {
+                console.error("Error saving document:", error);
+                showNotification(`Save Error: ${error.message}`, 'bg-red-500');
+            }
+        }
+
+        /**
+         * Deletes a vessel entry by ID.
+         */
+        async function deleteVesselEntry(id, name) {
+            if (!db || !userId) return;
+
+            const collectionPath = `artifacts/${appId}/users/${userId}/vessel_certificates`;
+            const docRef = doc(db, collectionPath, id);
+
+            try {
+                await deleteDoc(docRef);
+                showNotification(`Vessel '${name}' deleted.`, 'bg-gray-700');
+            } catch (error) {
+                console.error("Error deleting document:", error);
+                showNotification(`Delete Error: ${error.message}`, 'bg-red-500');
+            }
+        }
+
+        // --- Editing Functions ---
+
+        /**
+         * Populates the form with existing data and switches to edit mode.
+         */
+        function enterEditMode(data) {
+            const form = document.getElementById('certificateForm');
+            currentEditingId = data.id;
+
+            // Update UI elements for editing
+            document.getElementById('formTitle').textContent = `Edit Vessel: ${data.vesselName}`;
+            document.getElementById('submitBtn').textContent = 'Update Vessel Details';
+            document.getElementById('cancelEditBtn').classList.remove('hidden');
+
+            // Populate form fields
+            form.vesselName.value = data.vesselName || '';
+            
+            // SMC
+            form.smcIssued.value = formatDate(data.smcIssued) !== 'N/A' ? formatDate(data.smcIssued) : '';
+            form.smcIntermediateDue.value = formatDate(data.smcIntermediateDue) !== 'N/A' ? formatDate(data.smcIntermediateDue) : '';
+            form.smcExpire.value = formatDate(data.smcExpire) !== 'N/A' ? formatDate(data.smcExpire) : '';
+            form.smcIntermediateCompleted.checked = !!data.smcIntermediateCompleted; // NEW
+
+            // ISPS
+            form.ispsIssued.value = formatDate(data.ispsIssued) !== 'N/A' ? formatDate(data.ispsIssued) : '';
+            form.ispsIntermediateDue.value = formatDate(data.ispsIntermediateDue) !== 'N/A' ? formatDate(data.ispsIntermediateDue) : '';
+            form.ispsExpire.value = formatDate(data.ispsExpire) !== 'N/A' ? formatDate(data.ispsExpire) : '';
+            form.ispsIntermediateCompleted.checked = !!data.ispsIntermediateCompleted; // NEW
+            
+            // MLC
+            form.mlcIssued.value = formatDate(data.mlcIssued) !== 'N/A' ? formatDate(data.mlcIssued) : '';
+            form.mlcIntermediateDue.value = formatDate(data.mlcIntermediateDue) !== 'N/A' ? formatDate(data.mlcIntermediateDue) : '';
+            form.mlcExpire.value = formatDate(data.mlcExpire) !== 'N/A' ? formatDate(data.mlcExpire) : '';
+            form.mlcIntermediateCompleted.checked = !!data.mlcIntermediateCompleted; // NEW
+        }
+
+        /**
+         * Resets the form and switches back to add mode.
+         */
+        function exitEditMode() {
+            const form = document.getElementById('certificateForm');
+            currentEditingId = null;
+            form.reset();
+            document.getElementById('formTitle').textContent = 'Add New Vessel Certificates';
+            document.getElementById('submitBtn').textContent = 'Add Vessel & Certificates';
+            document.getElementById('cancelEditBtn').classList.add('hidden');
+        }
+
+        /**
+         * Renders the date, status badge, and icon for a single certificate date field.
+         */
+        function renderDateCell(dateString, statusObj, label) {
+            const date = formatDate(dateString);
+            const bgColor = statusObj.color;
+            const text = statusObj.text;
+            const icon = statusObj.icon;
+            
+            return `
+                <div class="flex flex-col items-start py-1">
+                    <span class="text-xs text-gray-500 font-medium">${label}:</span>
+                    <div class="flex items-center space-x-2 mt-0.5">
+                        <span class="text-sm font-semibold text-gray-800">${date}</span>
+                        <span class="text-xs font-semibold px-2 py-0.5 rounded-full text-white w-fit shadow-md" style="background-color: ${bgColor};">
+                            ${icon} ${text}
+                        </span>
+                    </div>
+                </div>
+            `;
+        }
+
+        /**
+         * Renders the full details for one certificate group (SMC, ISPS, or MLC).
+         */
+        function renderCertificateGroupCell(vessel, certPrefix) {
+            const issuedDate = vessel[`${certPrefix}Issued`];
+            const intermediateDue = vessel[`${certPrefix}IntermediateDue`];
+            const expire = vessel[`${certPrefix}Expire`];
+            const isCompleted = vessel[`${certPrefix}IntermediateCompleted`] || false;
+            
+            // Calculate statuses
+            const intermediateStatus = getIntermediateStatus(intermediateDue, isCompleted);
+            const expireStatus = calculateDateStatus(expire);
+
+            return `
+                <td class="px-4 py-4 text-sm align-top">
+                    <div class="space-y-2">
+                        <!-- Issued Date (No dynamic status needed) -->
+                        ${renderDateCell(issuedDate, dateConfigs['Not Required'], 'Issued').replace('Not Required', '').replace('N/A', '')}
+
+                        <!-- Intermediate Due Date -->
+                        ${renderDateCell(intermediateDue, intermediateStatus, 'Int. Due')}
+                        
+                        <!-- Expire Date -->
+                        ${renderDateCell(expire, expireStatus, 'Expire')}
+                    </div>
+                </td>
+            `;
+        }
+
+        // --- View Rendering ---
+
+        /**
+         * Renders the vessel data in a responsive table.
+         */
+        function renderTable(vessels) {
+            const container = document.getElementById('vesselTableBody');
+            container.innerHTML = '';
+
+            if (vessels.length === 0) {
+                document.getElementById('tableMessage').classList.remove('hidden');
+                return;
+            }
+            document.getElementById('tableMessage').classList.add('hidden');
+
+            vessels.forEach(vessel => {
+                const { status, color } = getVesselOverallStatus(vessel);
+
+                const row = document.createElement('tr');
+                row.className = 'border-b last:border-b-0 hover:bg-indigo-50/50 transition-colors duration-200';
+                
+                row.innerHTML = `
+                    <td class="px-4 py-4 font-semibold text-base text-gray-900 sticky left-0 bg-white shadow-md z-10 rounded-l-xl">
+                        ${vessel.vesselName}
+                        <span class="block text-xs font-bold px-3 py-1 mt-2 rounded-full text-white w-fit shadow-lg" style="background-color: ${color};">${status}</span>
+                    </td>
+                    ${renderCertificateGroupCell(vessel, 'smc')}
+                    ${renderCertificateGroupCell(vessel, 'isps')}
+                    ${renderCertificateGroupCell(vessel, 'mlc')}
+                    <td class="px-4 py-4 text-right sticky right-0 bg-white shadow-md z-10 rounded-r-xl">
+                        <button data-id="${vessel.id}" data-name="${vessel.vesselName}" class="edit-btn text-indigo-600 hover:text-white p-2 mr-2 rounded-full bg-indigo-100 hover:bg-indigo-600 transition duration-150 shadow-md">
+                            <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5 inline" viewBox="0 0 20 20" fill="currentColor"><path d="M13.586 3.586a2 2 0 112.828 2.828l-.793.793-2.828-2.828.793-.793zm-3.464 1.464L5 11.5V15h3.5l5.5-5.5-2.828-2.828z" /></svg>
+                        </button>
+                        <button data-id="${vessel.id}" data-name="${vessel.vesselName}" class="delete-btn text-red-600 hover:text-white p-2 rounded-full bg-red-100 hover:bg-red-600 transition duration-150 shadow-md">
+                            <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5 inline" viewBox="0 0 20 20" fill="currentColor"><path fill-rule="evenodd" d="M9 2a1 1 0 00-.894.553L7.382 4H4a1 1 0 000 2v10a2 2 0 002 2h8a2 2 0 002-2V6a1 1 0 100-2h-3.382l-.724-1.447A1 1 0 0011 2H9zM7 8a1 1 0 012 0v6a1 1 0 11-2 0V8zm5-1a1 1 0 00-1 1v6a1 1 0 102 0V8a1 1 0 00-1-1z" clip-rule="evenodd" /></svg>
+                        </button>
+                    </td>
+                `;
+                container.appendChild(row);
+            });
+
+            // Attach event listeners after rendering
+            document.querySelectorAll('.edit-btn').forEach(btn => {
+                btn.addEventListener('click', (e) => {
+                    const id = e.currentTarget.dataset.id;
+                    const vessel = allVessels.find(v => v.id === id);
+                    if (vessel) navigateTo('form', vessel);
+                });
+            });
+
+            document.querySelectorAll('.delete-btn').forEach(btn => {
+                btn.addEventListener('click', (e) => {
+                    const id = e.currentTarget.dataset.id;
+                    const name = e.currentTarget.dataset.name;
+                    deleteVesselEntry(id, name);
+                });
+            });
+        }
+
+        /**
+         * Renders the Pie Chart showing the status breakdown of ALL critical dates.
+         */
+        function renderChart(vessels) {
+            const dateFields = [
+                { date: 'smcIntermediateDue', completed: 'smcIntermediateCompleted' }, 
+                { date: 'smcExpire' },
+                { date: 'ispsIntermediateDue', completed: 'ispsIntermediateCompleted' }, 
+                { date: 'ispsExpire' },
+                { date: 'mlcIntermediateDue', completed: 'mlcIntermediateCompleted' }, 
+                { date: 'mlcExpire' }
+            ];
+            
+            // We use the 'text' property from dateConfigs for keys
+            const dateStatuses = {
+                'Overdue': { count: 0, color: dateConfigs.Overdue.color },
+                'Due Soon': { count: 0, color: dateConfigs['Due Soon'].color },
+                'Active': { count: 0, color: dateConfigs.Active.color },
+                'Completed': { count: 0, color: dateConfigs.Completed.color }, // Include Completed
+                'N/A': { count: 0, color: dateConfigs['Not Required'].color }
+            };
+
+            vessels.forEach(vessel => {
+                dateFields.forEach(field => {
+                    const dateStr = vessel[field.date];
+                    let statusObj;
+
+                    if (field.completed) {
+                        statusObj = getIntermediateStatus(dateStr, vessel[field.completed]);
+                    } else {
+                        statusObj = calculateDateStatus(dateStr);
+                    }
+                    
+                    if (dateStatuses[statusObj.text]) {
+                        dateStatuses[statusObj.text].count++;
+                    }
+                });
+            });
+
+            const labels = Object.keys(dateStatuses).filter(key => dateStatuses[key].count > 0 && key !== 'N/A');
+            const data = labels.map(key => dateStatuses[key].count);
+            const colors = labels.map(key => dateStatuses[key].color);
+
+            const ctx = document.getElementById('statusChart').getContext('2d');
+
+            if (chartInstance) {
+                chartInstance.destroy();
+            }
+
+            chartInstance = new Chart(ctx, {
+                type: 'doughnut',
+                data: {
+                    labels: labels,
+                    datasets: [{
+                        data: data,
+                        backgroundColor: colors,
+                        hoverOffset: 8
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    plugins: {
+                        legend: { position: 'right' },
+                        title: {
+                            display: true,
+                            text: 'All Critical Date Statuses (Due Soon < 90 days)',
+                            font: { size: 16 }
+                        }
+                    }
+                }
+            });
+        }
+
+        // --- Initial Setup ---
+
+        window.addEventListener('load', () => {
+            initializeFirebase();
+            document.getElementById('certificateForm').addEventListener('submit', handleFormSubmit);
+            document.getElementById('cancelEditBtn').addEventListener('click', () => navigateTo('table'));
+
+            // Navigation handlers
+            document.getElementById('formLink').addEventListener('click', (e) => {
+                e.preventDefault();
+                navigateTo('form');
+            });
+            document.getElementById('tableLink').addEventListener('click', (e) => {
+                e.preventDefault();
+                navigateTo('table');
+            });
+        });
+    </script>
+</head>
+<body class="min-h-screen p-4 md:p-8">
+
+    <div id="notification" class="fixed bottom-4 right-4 p-3 rounded-lg text-white shadow-lg z-50 transition-all duration-300 transform translate-y-20 bg-green-500"></div>
+
+    <header class="max-w-7xl mx-auto mb-6 flex justify-between items-center border-b pb-3">
+        <div>
+            <h1 class="text-3xl font-extrabold text-gray-800">Maritime Compliance Hub</h1>
+            <p id="userIdDisplay" class="text-xs text-gray-500 mt-1">Authenticating...</p>
+        </div>
+        <nav class="flex space-x-4 text-lg font-medium">
+            <a href="#" id="formLink" class="text-gray-600 hover:text-indigo-600 transition">Add Vessel</a>
+            <span class="text-gray-300">|</span>
+            <a href="#" id="tableLink" class="text-indigo-600 font-bold transition">Dashboard</a>
+        </nav>
+    </header>
+
+    <main class="max-w-7xl mx-auto">
+        
+        <!-- ==================================================================== -->
+        <!-- Page 1: Input/Form View -->
+        <!-- ==================================================================== -->
+        <div id="formView" class="container-view hidden bg-white p-6 rounded-xl shadow-2xl lg:p-8">
+            <h2 id="formTitle" class="text-2xl font-bold text-gray-700 mb-6">Add New Vessel Certificates</h2>
+            
+            <form id="certificateForm" class="space-y-6">
+                
+                <!-- Vessel Name -->
+                <div>
+                    <label for="vesselName" class="block text-sm font-medium text-gray-700">Vessel Name</label>
+                    <input type="text" id="vesselName" name="vesselName" required
+                            class="mt-1 block w-full rounded-md border-gray-300 shadow-sm p-3 border focus:border-indigo-500 focus:ring focus:ring-indigo-500 focus:ring-opacity-50 text-lg font-semibold">
+                </div>
+
+                <div class="space-y-6">
+                    <!-- SMC Group -->
+                    <fieldset class="border border-gray-200 p-4 rounded-lg">
+                        <legend class="text-lg font-semibold text-gray-800 px-2">SMC - Safety Management Certificate</legend>
+                        <div class="grid grid-cols-1 md:grid-cols-3 gap-4 mt-2">
+                            <div>
+                                <label for="smcIssued" class="block text-sm font-medium text-gray-700">Issued Date</label>
+                                <input type="date" id="smcIssued" name="smcIssued" class="input-date">
+                            </div>
+                            <div>
+                                <label for="smcIntermediateDue" class="block text-sm font-medium text-gray-700">Intermediate Due</label>
+                                <input type="date" id="smcIntermediateDue" name="smcIntermediateDue" class="input-date">
+                            </div>
+                            <div>
+                                <label for="smcExpire" class="block text-sm font-medium text-gray-700">Expire Date</label>
+                                <input type="date" id="smcExpire" name="smcExpire" required class="input-date">
+                            </div>
+                        </div>
+                        <div class="mt-4 flex items-center">
+                            <input type="checkbox" id="smcIntermediateCompleted" name="smcIntermediateCompleted" class="rounded text-indigo-600 shadow-sm focus:border-indigo-500 focus:ring focus:ring-indigo-500 focus:ring-opacity-50 h-5 w-5">
+                            <label for="smcIntermediateCompleted" class="ml-2 text-base font-medium text-gray-700">Intermediate Audit Completed</label>
+                        </div>
+                    </fieldset>
+
+                    <!-- ISPS Group -->
+                    <fieldset class="border border-gray-200 p-4 rounded-lg">
+                        <legend class="text-lg font-semibold text-gray-800 px-2">ISPS - Security Certificate</legend>
+                        <div class="grid grid-cols-1 md:grid-cols-3 gap-4 mt-2">
+                            <div>
+                                <label for="ispsIssued" class="block text-sm font-medium text-gray-700">Issued Date</label>
+                                <input type="date" id="ispsIssued" name="ispsIssued" class="input-date">
+                            </div>
+                            <div>
+                                <label for="ispsIntermediateDue" class="block text-sm font-medium text-gray-700">Intermediate Due</label>
+                                <input type="date" id="ispsIntermediateDue" name="ispsIntermediateDue" class="input-date">
+                            </div>
+                            <div>
+                                <label for="ispsExpire" class="block text-sm font-medium text-gray-700">Expire Date</label>
+                                <input type="date" id="ispsExpire" name="ispsExpire" required class="input-date">
+                            </div>
+                        </div>
+                        <div class="mt-4 flex items-center">
+                            <input type="checkbox" id="ispsIntermediateCompleted" name="ispsIntermediateCompleted" class="rounded text-indigo-600 shadow-sm focus:border-indigo-500 focus:ring focus:ring-indigo-500 focus:ring-opacity-50 h-5 w-5">
+                            <label for="ispsIntermediateCompleted" class="ml-2 text-base font-medium text-gray-700">Intermediate Audit Completed</label>
+                        </div>
+                    </fieldset>
+
+                    <!-- MLC Group -->
+                    <fieldset class="border border-gray-200 p-4 rounded-lg">
+                        <legend class="text-lg font-semibold text-gray-800 px-2">MLC - Maritime Labour Convention</legend>
+                        <div class="grid grid-cols-1 md:grid-cols-3 gap-4 mt-2">
+                            <div>
+                                <label for="mlcIssued" class="block text-sm font-medium text-gray-700">Issued Date</label>
+                                <input type="date" id="mlcIssued" name="mlcIssued" class="input-date">
+                            </div>
+                            <div>
+                                <label for="mlcIntermediateDue" class="block text-sm font-medium text-gray-700">Intermediate Due</label>
+                                <input type="date" id="mlcIntermediateDue" name="mlcIntermediateDue" class="input-date">
+                            </div>
+                            <div>
+                                <label for="mlcExpire" class="block text-sm font-medium text-gray-700">Expire Date</label>
+                                <input type="date" id="mlcExpire" name="mlcExpire" required class="input-date">
+                            </div>
+                        </div>
+                        <div class="mt-4 flex items-center">
+                            <input type="checkbox" id="mlcIntermediateCompleted" name="mlcIntermediateCompleted" class="rounded text-indigo-600 shadow-sm focus:border-indigo-500 focus:ring focus:ring-indigo-500 focus:ring-opacity-50 h-5 w-5">
+                            <label for="mlcIntermediateCompleted" class="ml-2 text-base font-medium text-gray-700">Intermediate Audit Completed</label>
+                        </div>
+                    </fieldset>
+                </div>
+                
+                <div class="flex space-x-4 pt-4">
+                    <button type="submit" id="submitBtn"
+                            class="flex-grow bg-indigo-600 text-white py-3 px-6 border border-transparent rounded-lg shadow-lg font-semibold hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500 transition duration-150">
+                        Add Vessel & Certificates
+                    </button>
+                    <button type="button" id="cancelEditBtn"
+                            class="hidden bg-gray-300 text-gray-800 py-3 px-6 border border-transparent rounded-lg shadow-lg font-semibold hover:bg-gray-400 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-gray-500 transition duration-150">
+                        Cancel Edit
+                    </button>
+                </div>
+            </form>
+            <style>
+                .input-date {
+                    @apply mt-1 block w-full rounded-md border-gray-300 shadow-sm p-2 border focus:border-indigo-500 focus:ring focus:ring-indigo-500 focus:ring-opacity-50;
+                }
+            </style>
+        </div>
+
+        <!-- ==================================================================== -->
+        <!-- Page 2: Dashboard/Table View -->
+        <!-- ==================================================================== -->
+        <div id="tableView" class="container-view">
+            <div class="grid grid-cols-1 lg:grid-cols-3 gap-8 mb-8">
+                <!-- Chart Area -->
+                <div class="lg:col-span-1 bg-white p-6 rounded-xl shadow-2xl h-[400px]">
+                    <h2 class="text-xl font-bold text-gray-700 mb-4 border-b pb-2">Compliance Status Summary</h2>
+                    <div class="h-full w-full flex justify-center items-center">
+                        <canvas id="statusChart"></canvas>
+                    </div>
+                </div>
+
+                <!-- Guidance/Info -->
+                <div class="lg:col-span-2 bg-white p-6 rounded-xl shadow-2xl">
+                    <h2 class="text-xl font-bold text-gray-700 mb-4 border-b pb-2">Vessel Certificates (SMC, ISPS, MLC)</h2>
+                    <p class="text-sm text-gray-600 mb-3">
+                        **Overall Status:** Reflects the single most critical outstanding date (Intermediate or Expire).
+                        <span class="font-bold" style="color: ${dateConfigs.Overdue.color};">${dateConfigs.Overdue.icon} Overdue</span>, 
+                        <span class="font-bold" style="color: ${dateConfigs['Due Soon'].color};">${dateConfigs['Due Soon'].icon} Due Soon</span> (within 90 days), 
+                        <span class="font-bold" style="color: ${dateConfigs.Completed.color};">${dateConfigs.Completed.icon} Completed</span>, 
+                        <span class="font-bold" style="color: ${dateConfigs.Active.color};">${dateConfigs.Active.icon} Active</span>.
+                    </p>
+                    <div class="flex space-x-4 text-xs font-semibold">
+                        <span class="text-gray-600">Actions:</span>
+                        <span class="text-indigo-600">Edit</span> / <span class="text-red-600">Delete</span>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Table Area -->
+            <div class="table-container bg-white overflow-x-auto relative">
+                <table class="min-w-full divide-y divide-gray-200">
+                    <thead class="bg-indigo-50/50">
+                        <tr class="table-sticky-header">
+                            <th scope="col" class="px-4 py-3 text-left text-xs font-bold text-indigo-700 uppercase tracking-wider sticky left-0 bg-indigo-50/50 z-20 w-48">Vessel / Overall Status</th>
+                            <th scope="col" class="px-4 py-3 text-left text-xs font-bold text-indigo-700 uppercase tracking-wider">SMC (Safety Management)</th>
+                            <th scope="col" class="px-4 py-3 text-left text-xs font-bold text-indigo-700 uppercase tracking-wider">ISPS (Security)</th>
+                            <th scope="col" class="px-4 py-3 text-left text-xs font-bold text-indigo-700 uppercase tracking-wider">MLC (Labour Convention)</th>
+                            <th scope="col" class="px-4 py-3 text-right text-xs font-bold text-indigo-700 uppercase tracking-wider sticky right-0 bg-indigo-50/50 z-20 w-32">Actions</th>
+                        </tr>
+                    </thead>
+                    <tbody id="vesselTableBody" class="bg-white divide-y divide-gray-100">
+                        <!-- Data rows injected here -->
+                    </tbody>
+                </table>
+                <p id="tableMessage" class="text-center text-gray-500 py-10 hidden">No vessel entries found. Navigate to "Add Vessel" to get started.</p>
+            </div>
+        </div>
+    </main>
+</body>
+</html>
