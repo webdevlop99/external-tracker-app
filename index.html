@@ -3,7 +3,7 @@
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>ISM External Audit Tracker</title>
+    <title>d'Amico Vessel External Audit Tracker</title>
 
     <!-- Tailwind CSS -->
     <script src="https://cdn.tailwindcss.com"></script>
@@ -201,7 +201,7 @@
                 🚢 Vessel External Audit Tracker
               </h1>
               <p class="text-gray-600 dark:text-gray-400 mt-2">
-                SMC • ISPS • MLC External Audit
+                SMC • ISPS • MLC Audit Tracker
               </p>
             </div>
 
@@ -940,15 +940,32 @@
       }
 
       // ============================================================================
-      // DRAG AND DROP FUNCTIONALITY
+      // DRAG AND DROP FUNCTIONALITY - FIXED
       // ============================================================================
       function setupDragAndDrop() {
         const dropZone = document.getElementById("dropZone");
         const fileInput = document.getElementById("csvFileInput");
+        let browseFileClicked = false;
 
-        // Click to browse
-        dropZone.addEventListener("click", () => {
-          fileInput.click();
+        // Click to browse - FIXED: Only open file dialog once
+        document.getElementById("browseFile").addEventListener("click", (e) => {
+          e.stopPropagation(); // Prevent event bubbling
+          if (!browseFileClicked) {
+            browseFileClicked = true;
+            fileInput.click();
+            // Reset after a short delay
+            setTimeout(() => {
+              browseFileClicked = false;
+            }, 100);
+          }
+        });
+
+        // Also allow clicking the drop zone area (but not the button)
+        dropZone.addEventListener("click", (e) => {
+          // Only trigger if the click wasn't on the browse button
+          if (!e.target.closest("#browseFile")) {
+            fileInput.click();
+          }
         });
 
         // Drag and drop events
@@ -1706,10 +1723,6 @@
           .addEventListener("click", handleChartClick);
 
         // Import/Export
-        document.getElementById("browseFile").addEventListener("click", () => {
-          document.getElementById("csvFileInput").click();
-        });
-
         document
           .getElementById("csvFileInput")
           .addEventListener("change", handleFileSelect);
@@ -2383,22 +2396,30 @@
         doc.setFontSize(11);
         doc.text(`Generated: ${dateStr}`, 14, 30);
 
-        // Prepare table data
+        // Prepare table data with all required columns
         const tableData = vessels.map((vessel) => {
-          const vesselStatus = getVesselStatus(vessel);
-          const row = [
-            vessel.name,
-            vesselStatus.label.charAt(0).toUpperCase() +
-              vesselStatus.label.slice(1),
-          ];
+          const row = [vessel.name];
 
+          // Add all certification dates
           CERTS.forEach((cert) => {
             const certData = vessel[cert] || {};
-            const status = getCertStatus(certData);
-            row.push(
-              certData.expiry ? formatDate(certData.expiry) : "N/A",
-              status.label
+            
+            // Issue date (always normal)
+            row.push(certData.issue ? formatDate(certData.issue) : "N/A");
+            
+            // Intermediate date with status check
+            const intStatus = getDateStatus(
+              certData.intermediateDue,
+              true,
+              certData.intermediateCompleted
             );
+            const intDate = certData.intermediateDue ? formatDate(certData.intermediateDue) : "N/A";
+            row.push(intDate);
+            
+            // Expiry date with status check
+            const expStatus = getDateStatus(certData.expiry, false, false);
+            const expDate = certData.expiry ? formatDate(certData.expiry) : "N/A";
+            row.push(expDate);
           });
 
           return row;
@@ -2407,16 +2428,12 @@
         // Table headers
         const headers = [
           "Vessel Name",
-          "Overall Status",
-          "SMC Expiry",
-          "SMC Status",
-          "ISPS Expiry",
-          "ISPS Status",
-          "MLC Expiry",
-          "MLC Status",
+          "SMC Issue", "SMC Int.", "SMC Expiry",
+          "ISPS Issue", "ISPS Int.", "ISPS Expiry",
+          "MLC Issue", "MLC Int.", "MLC Expiry"
         ];
 
-        // Generate table
+        // Generate table with custom cell styling
         doc.autoTable({
           head: [headers],
           body: tableData,
@@ -2426,23 +2443,97 @@
             fontSize: 9,
             cellPadding: 3,
             overflow: "linebreak",
+            halign: "center",
           },
           headStyles: {
-            fillColor: [59, 130, 246],
+            fillColor: [59, 130, 246], // Blue header
             textColor: 255,
+            fontSize: 10,
+            fontStyle: "bold",
+          },
+          columnStyles: {
+            0: { cellWidth: 25, halign: "left" }, // Vessel Name
+            1: { cellWidth: 15 }, // SMC Issue
+            2: { cellWidth: 15 }, // SMC Int
+            3: { cellWidth: 15 }, // SMC Expiry
+            4: { cellWidth: 15 }, // ISPS Issue
+            5: { cellWidth: 15 }, // ISPS Int
+            6: { cellWidth: 15 }, // ISPS Expiry
+            7: { cellWidth: 15 }, // MLC Issue
+            8: { cellWidth: 15 }, // MLC Int
+            9: { cellWidth: 15 }, // MLC Expiry
+          },
+          willDrawCell: function(data) {
+            // Skip header row
+            if (data.section === 'head') return;
+            
+            // Column indices for intermediate and expiry dates
+            const intermediateCols = [2, 5, 8]; // SMC Int, ISPS Int, MLC Int columns
+            const expiryCols = [3, 6, 9]; // SMC Exp, ISPS Exp, MLC Exp columns
+            
+            const vesselIndex = data.row.index;
+            const vessel = vessels[vesselIndex];
+            
+            if (vessel) {
+              // Check if this is an intermediate date column
+              if (intermediateCols.includes(data.column.index)) {
+                const certIndex = Math.floor((data.column.index - 1) / 3);
+                const cert = CERTS[certIndex];
+                const certData = vessel[cert] || {};
+                
+                if (certData.intermediateDue) {
+                  const status = getDateStatus(
+                    certData.intermediateDue,
+                    true,
+                    certData.intermediateCompleted
+                  );
+                  
+                  // Apply color coding
+                  if (status.status === "expired") {
+                    doc.setFillColor(255, 220, 220); // Light red
+                    doc.rect(data.cell.x, data.cell.y, data.cell.width, data.cell.height, 'F');
+                    doc.setTextColor(255, 0, 0); // Red text
+                  } else if (status.status === "coming") {
+                    doc.setFillColor(255, 248, 220); // Light yellow
+                    doc.rect(data.cell.x, data.cell.y, data.cell.width, data.cell.height, 'F');
+                    doc.setTextColor(255, 165, 0); // Orange text
+                  } else if (certData.intermediateCompleted) {
+                    doc.setFillColor(220, 255, 220); // Light green
+                    doc.rect(data.cell.x, data.cell.y, data.cell.width, data.cell.height, 'F');
+                    doc.setTextColor(0, 128, 0); // Green text
+                  }
+                }
+              }
+              
+              // Check if this is an expiry date column
+              else if (expiryCols.includes(data.column.index)) {
+                const certIndex = Math.floor((data.column.index - 1) / 3);
+                const cert = CERTS[certIndex];
+                const certData = vessel[cert] || {};
+                
+                if (certData.expiry) {
+                  const status = getDateStatus(certData.expiry, false, false);
+                  
+                  // Apply color coding
+                  if (status.status === "expired") {
+                    doc.setFillColor(255, 220, 220); // Light red
+                    doc.rect(data.cell.x, data.cell.y, data.cell.width, data.cell.height, 'F');
+                    doc.setTextColor(255, 0, 0); // Red text
+                  } else if (status.status === "coming") {
+                    doc.setFillColor(255, 248, 220); // Light yellow
+                    doc.rect(data.cell.x, data.cell.y, data.cell.width, data.cell.height, 'F');
+                    doc.setTextColor(255, 165, 0); // Orange text
+                  }
+                }
+              }
+            }
+          },
+          didDrawCell: function(data) {
+            // Reset text color after drawing each cell
+            doc.setTextColor(0, 0, 0);
           },
           alternateRowStyles: {
             fillColor: [240, 240, 240],
-          },
-          columnStyles: {
-            0: { cellWidth: 30 },
-            1: { cellWidth: 25 },
-            2: { cellWidth: 20 },
-            3: { cellWidth: 20 },
-            4: { cellWidth: 20 },
-            5: { cellWidth: 20 },
-            6: { cellWidth: 20 },
-            7: { cellWidth: 20 },
           },
         });
 
@@ -2505,7 +2596,7 @@
           "MLC Expiry",
         ];
 
-        // Generate table
+        // Generate table with color coding
         doc.autoTable({
           head: [headers],
           body: tableData,
@@ -2515,10 +2606,94 @@
             fontSize: 8,
             cellPadding: 2,
             overflow: "linebreak",
+            halign: "center",
           },
           headStyles: {
             fillColor: [59, 130, 246],
             textColor: 255,
+            fontSize: 9,
+            fontStyle: "bold",
+          },
+          columnStyles: {
+            0: { cellWidth: 25, halign: "left" }, // Vessel Name
+            1: { cellWidth: 15 }, // SMC Issue
+            2: { cellWidth: 15 }, // SMC Int
+            3: { cellWidth: 15 }, // SMC Expiry
+            4: { cellWidth: 15 }, // ISPS Issue
+            5: { cellWidth: 15 }, // ISPS Int
+            6: { cellWidth: 15 }, // ISPS Expiry
+            7: { cellWidth: 15 }, // MLC Issue
+            8: { cellWidth: 15 }, // MLC Int
+            9: { cellWidth: 15 }, // MLC Expiry
+          },
+          willDrawCell: function(data) {
+            // Skip header row
+            if (data.section === 'head') return;
+            
+            // Column indices for intermediate and expiry dates
+            const intermediateCols = [2, 5, 8]; // SMC Int, ISPS Int, MLC Int columns
+            const expiryCols = [3, 6, 9]; // SMC Exp, ISPS Exp, MLC Exp columns
+            
+            const vesselIndex = data.row.index;
+            const vessel = vessels[vesselIndex];
+            
+            if (vessel) {
+              // Check if this is an intermediate date column
+              if (intermediateCols.includes(data.column.index)) {
+                const certIndex = Math.floor((data.column.index - 1) / 3);
+                const cert = CERTS[certIndex];
+                const certData = vessel[cert] || {};
+                
+                if (certData.intermediateDue) {
+                  const status = getDateStatus(
+                    certData.intermediateDue,
+                    true,
+                    certData.intermediateCompleted
+                  );
+                  
+                  // Apply color coding
+                  if (status.status === "expired") {
+                    doc.setFillColor(255, 220, 220); // Light red
+                    doc.rect(data.cell.x, data.cell.y, data.cell.width, data.cell.height, 'F');
+                    doc.setTextColor(255, 0, 0); // Red text
+                  } else if (status.status === "coming") {
+                    doc.setFillColor(255, 248, 220); // Light yellow
+                    doc.rect(data.cell.x, data.cell.y, data.cell.width, data.cell.height, 'F');
+                    doc.setTextColor(255, 165, 0); // Orange text
+                  } else if (certData.intermediateCompleted) {
+                    doc.setFillColor(220, 255, 220); // Light green
+                    doc.rect(data.cell.x, data.cell.y, data.cell.width, data.cell.height, 'F');
+                    doc.setTextColor(0, 128, 0); // Green text
+                  }
+                }
+              }
+              
+              // Check if this is an expiry date column
+              else if (expiryCols.includes(data.column.index)) {
+                const certIndex = Math.floor((data.column.index - 1) / 3);
+                const cert = CERTS[certIndex];
+                const certData = vessel[cert] || {};
+                
+                if (certData.expiry) {
+                  const status = getDateStatus(certData.expiry, false, false);
+                  
+                  // Apply color coding
+                  if (status.status === "expired") {
+                    doc.setFillColor(255, 220, 220); // Light red
+                    doc.rect(data.cell.x, data.cell.y, data.cell.width, data.cell.height, 'F');
+                    doc.setTextColor(255, 0, 0); // Red text
+                  } else if (status.status === "coming") {
+                    doc.setFillColor(255, 248, 220); // Light yellow
+                    doc.rect(data.cell.x, data.cell.y, data.cell.width, data.cell.height, 'F');
+                    doc.setTextColor(255, 165, 0); // Orange text
+                  }
+                }
+              }
+            }
+          },
+          didDrawCell: function(data) {
+            // Reset text color after drawing each cell
+            doc.setTextColor(0, 0, 0);
           },
           alternateRowStyles: {
             fillColor: [240, 240, 240],
@@ -2635,5 +2810,3 @@
     </script>
   </body>
 </html>
-
-
