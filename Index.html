@@ -1,0 +1,2637 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Vessel Compliance Tracker — Maritime Certification Management</title>
+
+    <!-- Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script>
+      tailwind.config = {
+        darkMode: "class",
+        theme: {
+          extend: {
+            colors: {
+              maritime: {
+                50: "#f0f9ff",
+                100: "#e0f2fe",
+                200: "#bae6fd",
+                300: "#7dd3fc",
+                400: "#38bdf8",
+                500: "#0ea5e9",
+                600: "#0284c7",
+                700: "#0369a1",
+                800: "#075985",
+                900: "#0c4a6e",
+              },
+            },
+            fontFamily: {
+              inter: ["Inter", "system-ui", "sans-serif"],
+            },
+          },
+        },
+      };
+    </script>
+
+    <!-- jsPDF for PDF export -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf-autotable/3.5.29/jspdf.plugin.autotable.min.js"></script>
+
+    <style>
+      * {
+        font-family: "Inter", system-ui, sans-serif;
+      }
+
+      /* Custom scrollbar */
+      ::-webkit-scrollbar {
+        width: 8px;
+        height: 8px;
+      }
+
+      ::-webkit-scrollbar-track {
+        background: #f1f1f1;
+        border-radius: 4px;
+      }
+
+      .dark ::-webkit-scrollbar-track {
+        background: #374151;
+      }
+
+      ::-webkit-scrollbar-thumb {
+        background: #9ca3af;
+        border-radius: 4px;
+      }
+
+      .dark ::-webkit-scrollbar-thumb {
+        background: #6b7280;
+      }
+
+      ::-webkit-scrollbar-thumb:hover {
+        background: #6b7280;
+      }
+
+      /* Status colors */
+      .status-valid {
+        background-color: #dcfce7;
+        color: #166534;
+      }
+
+      .dark .status-valid {
+        background-color: #14532d;
+        color: #bbf7d0;
+      }
+
+      .status-coming {
+        background-color: #fef3c7;
+        color: #92400e;
+      }
+
+      .dark .status-coming {
+        background-color: #78350f;
+        color: #fde68a;
+      }
+
+      .status-expired {
+        background-color: #fee2e2;
+        color: #991b1b;
+      }
+
+      .dark .status-expired {
+        background-color: #7f1d1d;
+        color: #fecaca;
+      }
+
+      /* Chart container */
+      #donutChart {
+        background-color: white;
+        border-radius: 8px;
+        box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+      }
+
+      .dark #donutChart {
+        background-color: #1f2937;
+      }
+
+      /* Sticky table headers */
+      .sticky-header th {
+        position: sticky;
+        top: 0;
+        z-index: 10;
+      }
+
+      .sticky-first-col td:first-child,
+      .sticky-first-col th:first-child {
+        position: sticky;
+        left: 0;
+        z-index: 20;
+        background-color: inherit;
+      }
+
+      /* Smooth transitions */
+      .smooth-transition {
+        transition: all 0.3s ease;
+      }
+
+      /* Modal backdrop */
+      .modal-backdrop {
+        background-color: rgba(0, 0, 0, 0.5);
+      }
+
+      /* Pulse animation for alerts */
+      @keyframes pulse {
+        0%,
+        100% {
+          opacity: 1;
+        }
+        50% {
+          opacity: 0.7;
+        }
+      }
+
+      .pulse {
+        animation: pulse 2s infinite;
+      }
+
+      /* Certification pill styling */
+      .cert-pill {
+        display: inline-flex;
+        align-items: center;
+        padding: 2px 8px;
+        border-radius: 9999px;
+        font-size: 11px;
+        font-weight: 600;
+        text-transform: uppercase;
+        letter-spacing: 0.05em;
+      }
+
+      /* Drag and drop styles */
+      .drop-zone {
+        border: 2px dashed #ccc;
+        border-radius: 8px;
+        padding: 2rem;
+        text-align: center;
+        cursor: pointer;
+        transition: all 0.3s ease;
+      }
+
+      .drop-zone.drag-over {
+        border-color: #0ea5e9;
+        background-color: rgba(14, 165, 233, 0.1);
+      }
+
+      .drop-zone:hover {
+        border-color: #0ea5e9;
+      }
+    </style>
+  </head>
+  <body class="bg-gray-50 dark:bg-gray-900 text-gray-900 dark:text-gray-100">
+    <!-- Main Container -->
+    <div class="min-h-screen p-4 md:p-6">
+      <div class="max-w-7xl mx-auto">
+        <!-- Header -->
+        <header class="mb-8">
+          <div
+            class="flex flex-col md:flex-row md:items-center justify-between gap-4 mb-6"
+          >
+            <div>
+              <h1
+                class="text-3xl md:text-4xl font-bold bg-gradient-to-r from-maritime-600 to-blue-600 bg-clip-text text-transparent"
+              >
+                🚢 Vessel Compliance Tracker
+              </h1>
+              <p class="text-gray-600 dark:text-gray-400 mt-2">
+                SMC • ISPS • MLC Certification Management System
+              </p>
+            </div>
+
+            <div class="flex items-center gap-4">
+              <!-- Theme Toggle -->
+              <button
+                id="themeToggle"
+                class="flex items-center gap-2 px-4 py-2 bg-gray-200 dark:bg-gray-700 rounded-lg hover:bg-gray-300 dark:hover:bg-gray-600 smooth-transition"
+              >
+                <span class="hidden dark:inline">🌙 Dark</span>
+                <span class="dark:hidden">☀️ Light</span>
+              </button>
+
+              <!-- Last Updated -->
+              <div
+                class="text-sm text-gray-500 dark:text-gray-400 hidden md:block"
+              >
+                Last updated: <span id="lastUpdated">Just now</span>
+              </div>
+            </div>
+          </div>
+
+          <!-- Navigation -->
+          <nav class="border-b border-gray-200 dark:border-gray-700">
+            <div class="flex space-x-1">
+              <button
+                id="navManagement"
+                class="px-4 py-3 text-sm font-medium border-b-2 border-transparent hover:border-maritime-500 hover:text-maritime-600 dark:hover:text-maritime-400 smooth-transition active-view"
+              >
+                📊 Management & Analytics
+              </button>
+              <button
+                id="navOverview"
+                class="px-4 py-3 text-sm font-medium border-b-2 border-transparent hover:border-maritime-500 hover:text-maritime-600 dark:hover:text-maritime-400 smooth-transition"
+              >
+                📋 Compliance Overview
+              </button>
+              <button
+                id="navImportExport"
+                class="px-4 py-3 text-sm font-medium border-b-2 border-transparent hover:border-maritime-500 hover:text-maritime-600 dark:hover:text-maritime-400 smooth-transition"
+              >
+                📁 Import/Export
+              </button>
+            </div>
+          </nav>
+        </header>
+
+        <!-- Main Content -->
+        <main>
+          <!-- View 1: Management & Analytics -->
+          <div id="viewManagement" class="view-content space-y-6">
+            <!-- Summary Cards -->
+            <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
+              <div
+                id="cardValid"
+                data-filter="valid"
+                class="cursor-pointer summary-card status-valid p-6 rounded-xl border border-green-200 dark:border-green-900 smooth-transition hover:scale-[1.02]"
+              >
+                <div class="flex items-center justify-between">
+                  <div>
+                    <p class="text-sm font-medium">Fully Compliant</p>
+                    <p class="text-3xl font-bold mt-2" id="countValid">0</p>
+                  </div>
+                  <div class="text-2xl">✅</div>
+                </div>
+              </div>
+
+              <div
+                id="cardComing"
+                data-filter="coming"
+                class="cursor-pointer summary-card status-coming p-6 rounded-xl border border-amber-200 dark:border-amber-900 smooth-transition hover:scale-[1.02]"
+              >
+                <div class="flex items-center justify-between">
+                  <div>
+                    <p class="text-sm font-medium">Coming Due (≤90 days)</p>
+                    <p class="text-3xl font-bold mt-2" id="countComing">0</p>
+                  </div>
+                  <div class="text-2xl">⚠️</div>
+                </div>
+              </div>
+
+              <div
+                id="cardExpired"
+                data-filter="expired"
+                class="cursor-pointer summary-card status-expired p-6 rounded-xl border border-red-200 dark:border-red-900 smooth-transition hover:scale-[1.02]"
+              >
+                <div class="flex items-center justify-between">
+                  <div>
+                    <p class="text-sm font-medium">Expired/Overdue</p>
+                    <p class="text-3xl font-bold mt-2" id="countExpired">0</p>
+                  </div>
+                  <div class="text-2xl">❌</div>
+                </div>
+              </div>
+            </div>
+
+            <!-- Single Donut Chart Section -->
+            <div class="bg-white dark:bg-gray-800 rounded-xl shadow-lg p-6">
+              <div class="flex items-center justify-between mb-4">
+                <h3 class="text-lg font-semibold">Status Overview</h3>
+                <div class="flex gap-2">
+                  <button
+                    id="clearFilter"
+                    class="text-sm text-maritime-600 dark:text-maritime-400 hover:underline"
+                  >
+                    Clear Filter
+                  </button>
+                  <button
+                    id="toggleDays"
+                    class="text-sm text-maritime-600 dark:text-maritime-400 hover:underline"
+                  >
+                    Show Days Remaining
+                  </button>
+                </div>
+              </div>
+              <div class="relative">
+                <canvas id="donutChart" width="400" height="250"></canvas>
+              </div>
+              <p class="text-sm text-gray-500 dark:text-gray-400 mt-3">
+                Click chart segments to filter vessels by status
+              </p>
+            </div>
+
+            <!-- Form and Table Section -->
+            <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
+              <!-- Form -->
+              <div
+                class="lg:col-span-1 bg-white dark:bg-gray-800 rounded-xl shadow-lg p-6"
+              >
+                <h3 class="text-lg font-semibold mb-4" id="formTitle">
+                  ➕ Add New Vessel
+                </h3>
+                <form id="vesselForm" class="space-y-4">
+                  <div>
+                    <label class="block text-sm font-medium mb-2">
+                      Vessel Name <span class="text-red-500">*</span>
+                    </label>
+                    <input
+                      type="text"
+                      id="vesselName"
+                      required
+                      class="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-gray-50 dark:bg-gray-700 focus:ring-2 focus:ring-maritime-500 focus:border-transparent"
+                    />
+                  </div>
+
+                  <!-- Certification Sections -->
+                  <div id="certSections" class="space-y-4">
+                    <!-- SMC, ISPS, MLC sections will be inserted here -->
+                  </div>
+
+                  <div
+                    class="flex items-center gap-3 pt-4 border-t border-gray-200 dark:border-gray-700"
+                  >
+                    <button
+                      type="submit"
+                      class="px-4 py-2 bg-maritime-600 text-white rounded-lg hover:bg-maritime-700 smooth-transition"
+                    >
+                      Save Vessel
+                    </button>
+                    <button
+                      type="button"
+                      id="cancelEdit"
+                      class="px-4 py-2 bg-gray-200 dark:bg-gray-700 rounded-lg hover:bg-gray-300 dark:hover:bg-gray-600 smooth-transition hidden"
+                    >
+                      Cancel
+                    </button>
+                    <button
+                      type="button"
+                      id="clearForm"
+                      class="ml-auto text-sm text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-gray-200 smooth-transition"
+                    >
+                      Clear Form
+                    </button>
+                  </div>
+                </form>
+              </div>
+
+              <!-- Table -->
+              <div
+                class="lg:col-span-2 bg-white dark:bg-gray-800 rounded-xl shadow-lg p-6"
+              >
+                <div class="flex items-center justify-between mb-4">
+                  <h3 class="text-lg font-semibold">Vessel Management</h3>
+                  <div class="text-sm text-gray-600 dark:text-gray-400">
+                    Showing
+                    <span id="filteredCount" class="font-bold">0</span> of
+                    <span id="totalVessels" class="font-bold">0</span> vessels
+                  </div>
+                </div>
+
+                <div class="overflow-x-auto">
+                  <table class="w-full">
+                    <thead class="bg-gray-50 dark:bg-gray-700 sticky-header">
+                      <tr>
+                        <th
+                          class="p-3 text-left text-xs font-medium uppercase tracking-wider"
+                        >
+                          Vessel
+                        </th>
+                        <th
+                          class="p-3 text-left text-xs font-medium uppercase tracking-wider"
+                        >
+                          SMC (Issue/Int/Exp)
+                        </th>
+                        <th
+                          class="p-3 text-left text-xs font-medium uppercase tracking-wider"
+                        >
+                          ISPS (Issue/Int/Exp)
+                        </th>
+                        <th
+                          class="p-3 text-left text-xs font-medium uppercase tracking-wider"
+                        >
+                          MLC (Issue/Int/Exp)
+                        </th>
+                        <th
+                          class="p-3 text-left text-xs font-medium uppercase tracking-wider"
+                        >
+                          Actions
+                        </th>
+                      </tr>
+                    </thead>
+                    <tbody
+                      id="vesselTableBody"
+                      class="divide-y divide-gray-200 dark:divide-gray-700"
+                    >
+                      <!-- Vessel rows will be inserted here -->
+                    </tbody>
+                  </table>
+                </div>
+
+                <div id="emptyState" class="text-center py-12 hidden">
+                  <div class="text-4xl mb-4">🚢</div>
+                  <h4 class="text-lg font-medium mb-2">No vessels found</h4>
+                  <p class="text-gray-600 dark:text-gray-400 mb-4">
+                    Add your first vessel using the form or import from CSV
+                  </p>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <!-- View 2: Compliance Overview -->
+          <div id="viewOverview" class="view-content hidden">
+            <div class="bg-white dark:bg-gray-800 rounded-xl shadow-lg p-6">
+              <div class="flex items-center justify-between mb-6">
+                <div>
+                  <h3 class="text-lg font-semibold">
+                    Compliance Overview Dashboard
+                  </h3>
+                  <p class="text-sm text-gray-600 dark:text-gray-400 mt-1">
+                    All dates are automatically color-coded based on compliance
+                    status
+                  </p>
+                </div>
+                <div class="flex gap-2">
+                  <button
+                    id="toggleDaysOverview"
+                    class="px-4 py-2 bg-gray-200 dark:bg-gray-700 rounded-lg hover:bg-gray-300 dark:hover:bg-gray-600 smooth-transition text-sm"
+                  >
+                    Show Days Remaining
+                  </button>
+                  <button
+                    id="exportOverview"
+                    class="px-4 py-2 bg-maritime-600 text-white rounded-lg hover:bg-maritime-700 smooth-transition"
+                  >
+                    Export as PDF
+                  </button>
+                </div>
+              </div>
+
+              <div class="overflow-x-auto">
+                <table class="w-full sticky-first-col">
+                  <thead class="bg-gray-50 dark:bg-gray-700">
+                    <tr>
+                      <th
+                        class="p-3 text-left text-xs font-medium uppercase tracking-wider border-b border-gray-200 dark:border-gray-600"
+                      >
+                        Vessel Name
+                      </th>
+                      <!-- SMC -->
+                      <th
+                        colspan="3"
+                        class="p-3 text-center text-xs font-medium uppercase tracking-wider border-b border-gray-200 dark:border-gray-600 bg-blue-50 dark:bg-blue-900/30"
+                      >
+                        SMC
+                      </th>
+                      <!-- ISPS -->
+                      <th
+                        colspan="3"
+                        class="p-3 text-center text-xs font-medium uppercase tracking-wider border-b border-gray-200 dark:border-gray-600 bg-green-50 dark:bg-green-900/30"
+                      >
+                        ISPS
+                      </th>
+                      <!-- MLC -->
+                      <th
+                        colspan="3"
+                        class="p-3 text-center text-xs font-medium uppercase tracking-wider border-b border-gray-200 dark:border-gray-600 bg-purple-50 dark:bg-purple-900/30"
+                      >
+                        MLC
+                      </th>
+                    </tr>
+                    <tr>
+                      <th
+                        class="p-3 text-left text-xs font-medium uppercase tracking-wider"
+                      ></th>
+                      <!-- SMC Subheaders -->
+                      <th class="p-3 text-center text-xs font-medium uppercase">
+                        Issue
+                      </th>
+                      <th class="p-3 text-center text-xs font-medium uppercase">
+                        Intermediate
+                      </th>
+                      <th class="p-3 text-center text-xs font-medium uppercase">
+                        Expiry
+                      </th>
+                      <!-- ISPS Subheaders -->
+                      <th class="p-3 text-center text-xs font-medium uppercase">
+                        Issue
+                      </th>
+                      <th class="p-3 text-center text-xs font-medium uppercase">
+                        Intermediate
+                      </th>
+                      <th class="p-3 text-center text-xs font-medium uppercase">
+                        Expiry
+                      </th>
+                      <!-- MLC Subheaders -->
+                      <th class="p-3 text-center text-xs font-medium uppercase">
+                        Issue
+                      </th>
+                      <th class="p-3 text-center text-xs font-medium uppercase">
+                        Intermediate
+                      </th>
+                      <th class="p-3 text-center text-xs font-medium uppercase">
+                        Expiry
+                      </th>
+                    </tr>
+                  </thead>
+                  <tbody
+                    id="overviewTableBody"
+                    class="divide-y divide-gray-200 dark:divide-gray-700"
+                  >
+                    <!-- Overview rows will be inserted here -->
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          </div>
+
+          <!-- View 3: Import/Export -->
+          <div id="viewImportExport" class="view-content hidden">
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+              <!-- Import Section -->
+              <div class="bg-white dark:bg-gray-800 rounded-xl shadow-lg p-6">
+                <h3 class="text-lg font-semibold mb-4">📥 Import Data</h3>
+                <div class="space-y-4">
+                  <div class="drop-zone" id="dropZone">
+                    <input
+                      type="file"
+                      id="csvFileInput"
+                      accept=".csv"
+                      class="hidden"
+                    />
+                    <div class="text-4xl mb-4">📁</div>
+                    <p class="mb-2">Drag & drop CSV file or click to browse</p>
+                    <p class="text-sm text-gray-500 dark:text-gray-400 mb-4">
+                      Supports .csv files with vessel certification data
+                    </p>
+                    <button
+                      id="browseFile"
+                      class="px-4 py-2 bg-maritime-600 text-white rounded-lg hover:bg-maritime-700 smooth-transition"
+                    >
+                      Browse Files
+                    </button>
+                  </div>
+
+                  <div class="bg-blue-50 dark:bg-blue-900/20 rounded-lg p-4">
+                    <h4 class="font-medium mb-2">CSV Format Requirements:</h4>
+                    <ul
+                      class="text-sm text-gray-600 dark:text-gray-400 space-y-1"
+                    >
+                      <li>• Required columns: <code>name</code></li>
+                      <li>
+                        • Date columns: <code>smc_issue</code>,
+                        <code>smc_expiry</code>,
+                        <code>smc_intermediatedue</code>, etc.
+                      </li>
+                      <li>
+                        • Dates in YYYY-MM-DD format (auto-converted from other
+                        formats)
+                      </li>
+                      <li>
+                        • Boolean columns:
+                        <code>smc_intermediatecompleted</code>
+                        (true/false/yes/no/1/0)
+                      </li>
+                      <li>• Existing vessels will be updated based on name</li>
+                    </ul>
+                  </div>
+                </div>
+              </div>
+
+              <!-- Export Section -->
+              <div class="bg-white dark:bg-gray-800 rounded-xl shadow-lg p-6">
+                <h3 class="text-lg font-semibold mb-4">📤 Export Data</h3>
+                <div class="space-y-4">
+                  <button
+                    id="exportCSV"
+                    class="w-full p-6 bg-green-50 dark:bg-green-900/20 border border-green-200 dark:border-green-800 rounded-lg hover:bg-green-100 dark:hover:bg-green-900/30 smooth-transition flex items-center justify-between"
+                  >
+                    <div class="text-left">
+                      <div class="text-2xl mb-2">📄</div>
+                      <h4 class="font-medium">Export as CSV</h4>
+                      <p class="text-sm text-gray-600 dark:text-gray-400">
+                        Download all vessel data in spreadsheet format
+                      </p>
+                    </div>
+                    <div class="text-2xl">⬇️</div>
+                  </button>
+
+                  <button
+                    id="exportPDF"
+                    class="w-full p-6 bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-lg hover:bg-red-100 dark:hover:bg-red-900/30 smooth-transition flex items-center justify-between"
+                  >
+                    <div class="text-left">
+                      <div class="text-2xl mb-2">📊</div>
+                      <h4 class="font-medium">Generate PDF Report</h4>
+                      <p class="text-sm text-gray-600 dark:text-gray-400">
+                        Create professional compliance report
+                      </p>
+                    </div>
+                    <div class="text-2xl">🖨️</div>
+                  </button>
+
+                  <div
+                    class="border-t border-gray-200 dark:border-gray-700 pt-4"
+                  >
+                    <button
+                      id="clearAllData"
+                      class="w-full p-4 bg-gray-100 dark:bg-gray-900 border border-gray-300 dark:border-gray-700 rounded-lg hover:bg-gray-200 dark:hover:bg-gray-800 smooth-transition text-red-600 dark:text-red-400"
+                    >
+                      🗑️ Clear All Data
+                    </button>
+                    <p
+                      class="text-xs text-gray-500 dark:text-gray-400 mt-2 text-center"
+                    >
+                      This will permanently delete all vessel records
+                    </p>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </main>
+
+        <!-- Footer -->
+        <footer
+          class="mt-12 pt-6 border-t border-gray-200 dark:border-gray-700"
+        >
+          <div
+            class="flex flex-col md:flex-row justify-between items-center gap-4"
+          >
+            <div class="text-sm text-gray-600 dark:text-gray-400">
+              <p>
+                Vessel Compliance Tracker v2.0 • Maritime Certification
+                Management
+              </p>
+              <p class="mt-1">All dates and times in UTC</p>
+            </div>
+            <div class="text-xs text-gray-500 dark:text-gray-500">
+              Data stored locally • Refresh to update status
+            </div>
+          </div>
+        </footer>
+      </div>
+    </div>
+
+    <!-- Import Modal -->
+    <div
+      id="importModal"
+      class="fixed inset-0 z-50 hidden items-center justify-center p-4 modal-backdrop"
+    >
+      <div
+        class="bg-white dark:bg-gray-800 rounded-xl shadow-2xl max-w-md w-full p-6"
+      >
+        <h3 class="text-lg font-semibold mb-4">Processing Import</h3>
+        <div class="space-y-4">
+          <div class="flex items-center gap-3">
+            <div
+              class="w-8 h-8 border-4 border-maritime-200 border-t-maritime-600 rounded-full animate-spin"
+            ></div>
+            <div>
+              <p class="font-medium">Reading CSV file...</p>
+              <p
+                class="text-sm text-gray-600 dark:text-gray-400"
+                id="importStatus"
+              ></p>
+            </div>
+          </div>
+
+          <div class="bg-gray-50 dark:bg-gray-900 rounded-lg p-4">
+            <div class="flex justify-between text-sm mb-2">
+              <span>Processing</span>
+              <span id="importProgress">0/0</span>
+            </div>
+            <div class="w-full bg-gray-200 dark:bg-gray-700 rounded-full h-2">
+              <div
+                id="importProgressBar"
+                class="bg-maritime-600 h-2 rounded-full transition-all duration-300"
+                style="width: 0%"
+              ></div>
+            </div>
+          </div>
+
+          <div id="importResults" class="hidden">
+            <div class="grid grid-cols-2 gap-4 text-sm">
+              <div
+                class="text-center p-3 bg-green-50 dark:bg-green-900/20 rounded-lg"
+              >
+                <p
+                  class="font-medium text-green-700 dark:text-green-300"
+                  id="importAdded"
+                >
+                  0
+                </p>
+                <p class="text-gray-600 dark:text-gray-400">Added</p>
+              </div>
+              <div
+                class="text-center p-3 bg-blue-50 dark:bg-blue-900/20 rounded-lg"
+              >
+                <p
+                  class="font-medium text-blue-700 dark:text-blue-300"
+                  id="importUpdated"
+                >
+                  0
+                </p>
+                <p class="text-gray-600 dark:text-gray-400">Updated</p>
+              </div>
+            </div>
+          </div>
+
+          <div class="flex justify-end gap-3 pt-4">
+            <button
+              id="cancelImport"
+              class="px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-700 smooth-transition"
+            >
+              Cancel
+            </button>
+            <button
+              id="confirmImport"
+              class="px-4 py-2 bg-maritime-600 text-white rounded-lg hover:bg-maritime-700 smooth-transition hidden"
+            >
+              Complete Import
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <script>
+      // ============================================================================
+      // CONSTANTS AND CONFIGURATION
+      // ============================================================================
+      const CERTS = ["smc", "isps", "mlc"];
+      const CERT_LABELS = {
+        smc: "Safety Management Certificate (SMC)",
+        isps: "International Ship Security Certificate (ISPS)",
+        mlc: "Maritime Labour Certificate (MLC)",
+      };
+      const CERT_SHORT = {
+        smc: "SMC",
+        isps: "ISPS",
+        mlc: "MLC",
+      };
+      const STORAGE_KEY = "vessel_compliance_data_v4";
+      const TODAY = new Date();
+      TODAY.setHours(0, 0, 0, 0);
+      const MS_IN_DAY = 1000 * 60 * 60 * 24;
+      const WARNING_DAYS = 90;
+
+      // ============================================================================
+      // STATE MANAGEMENT
+      // ============================================================================
+      let vessels = [];
+      let editId = null;
+      let currentFilter = null;
+      let currentView = "management";
+      let showDaysRemaining = false;
+      let chartSegments = [];
+
+      // ============================================================================
+      // INITIALIZATION
+      // ============================================================================
+      document.addEventListener("DOMContentLoaded", () => {
+        initializeApp();
+      });
+
+      function initializeApp() {
+        loadData();
+        initializeTheme();
+        renderCertSections();
+        setupEventListeners();
+        setupDragAndDrop();
+        updateLastUpdated();
+        renderAll();
+      }
+
+      // ============================================================================
+      // DATA PERSISTENCE
+      // ============================================================================
+      function loadData() {
+        try {
+          const stored = localStorage.getItem(STORAGE_KEY);
+          vessels = stored ? JSON.parse(stored) : [];
+          console.log(`Loaded ${vessels.length} vessels from storage`);
+        } catch (error) {
+          console.error("Error loading data:", error);
+          vessels = [];
+        }
+      }
+
+      function saveData() {
+        try {
+          localStorage.setItem(STORAGE_KEY, JSON.stringify(vessels));
+          updateLastUpdated();
+        } catch (error) {
+          console.error("Error saving data:", error);
+        }
+      }
+
+      // ============================================================================
+      // THEME MANAGEMENT
+      // ============================================================================
+      function initializeTheme() {
+        const isDark =
+          localStorage.getItem("darkMode") === "true" ||
+          (!localStorage.getItem("darkMode") &&
+            window.matchMedia("(prefers-color-scheme: dark)").matches);
+
+        if (isDark) {
+          document.documentElement.classList.add("dark");
+        }
+
+        document
+          .getElementById("themeToggle")
+          .addEventListener("click", toggleTheme);
+      }
+
+      function toggleTheme() {
+        const isDark = document.documentElement.classList.toggle("dark");
+        localStorage.setItem("darkMode", isDark);
+        renderChart(); // Redraw chart with correct colors
+      }
+
+      // ============================================================================
+      // FORM MANAGEMENT
+      // ============================================================================
+      function renderCertSections() {
+        const container = document.getElementById("certSections");
+        container.innerHTML = "";
+
+        CERTS.forEach((cert) => {
+          const section = document.createElement("div");
+          section.className =
+            "border border-gray-200 dark:border-gray-700 rounded-lg p-4";
+          section.innerHTML = `
+                    <div class="flex items-center justify-between mb-3">
+                        <h4 class="font-medium">${CERT_SHORT[cert]}</h4>
+                        <span class="text-xs text-gray-500">${CERT_LABELS[cert]}</span>
+                    </div>
+                    <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                        <div>
+                            <label class="block text-sm font-medium mb-1">
+                                Issue Date <span class="text-red-500">*</span>
+                            </label>
+                            <input type="date" 
+                                   id="${cert}-issue" 
+                                   required
+                                   class="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-gray-50 dark:bg-gray-700">
+                        </div>
+                        <div>
+                            <label class="block text-sm font-medium mb-1">
+                                Expiry Date <span class="text-red-500">*</span>
+                            </label>
+                            <input type="date" 
+                                   id="${cert}-expiry" 
+                                   required
+                                   class="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-gray-50 dark:bg-gray-700">
+                        </div>
+                        <div>
+                            <label class="block text-sm font-medium mb-1">
+                                Intermediate Due
+                            </label>
+                            <input type="date" 
+                                   id="${cert}-intermediateDue" 
+                                   class="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-gray-50 dark:bg-gray-700">
+                        </div>
+                        <div class="flex items-center">
+                            <input type="checkbox" 
+                                   id="${cert}-intermediateCompleted" 
+                                   class="h-4 w-4 rounded border-gray-300 text-maritime-600 focus:ring-maritime-500">
+                            <label for="${cert}-intermediateCompleted" class="ml-2 text-sm">
+                                Intermediate Completed
+                            </label>
+                        </div>
+                    </div>
+                `;
+          container.appendChild(section);
+        });
+
+        setupDateCalculations();
+      }
+
+      function setupDateCalculations() {
+        CERTS.forEach((cert) => {
+          const issueInput = document.getElementById(`${cert}-issue`);
+          const expiryInput = document.getElementById(`${cert}-expiry`);
+          const intermediateInput = document.getElementById(
+            `${cert}-intermediateDue`
+          );
+
+          const calculateHandler = () => {
+            const issueDate = issueInput.value;
+            const expiryDate = expiryInput.value;
+
+            if (issueDate && expiryDate && !intermediateInput.value) {
+              const midpoint = calculateMidpoint(issueDate, expiryDate);
+              if (midpoint) {
+                intermediateInput.value = midpoint;
+              }
+            }
+          };
+
+          issueInput.addEventListener("change", calculateHandler);
+          expiryInput.addEventListener("change", calculateHandler);
+        });
+      }
+
+      // ============================================================================
+      // DRAG AND DROP FUNCTIONALITY
+      // ============================================================================
+      function setupDragAndDrop() {
+        const dropZone = document.getElementById("dropZone");
+        const fileInput = document.getElementById("csvFileInput");
+
+        // Click to browse
+        dropZone.addEventListener("click", () => {
+          fileInput.click();
+        });
+
+        // Drag and drop events
+        ["dragenter", "dragover", "dragleave", "drop"].forEach((eventName) => {
+          dropZone.addEventListener(eventName, preventDefaults, false);
+        });
+
+        function preventDefaults(e) {
+          e.preventDefault();
+          e.stopPropagation();
+        }
+
+        // Highlight drop zone
+        ["dragenter", "dragover"].forEach((eventName) => {
+          dropZone.addEventListener(eventName, highlight, false);
+        });
+
+        ["dragleave", "drop"].forEach((eventName) => {
+          dropZone.addEventListener(eventName, unhighlight, false);
+        });
+
+        function highlight() {
+          dropZone.classList.add("drag-over");
+        }
+
+        function unhighlight() {
+          dropZone.classList.remove("drag-over");
+        }
+
+        // Handle drop
+        dropZone.addEventListener("drop", handleDrop, false);
+
+        function handleDrop(e) {
+          const dt = e.dataTransfer;
+          const files = dt.files;
+
+          if (files.length > 0) {
+            const file = files[0];
+            if (file.name.toLowerCase().endsWith(".csv")) {
+              fileInput.files = files;
+              handleFileSelect({ target: fileInput });
+            } else {
+              alert("Please drop a CSV file");
+            }
+          }
+        }
+      }
+
+      // ============================================================================
+      // DATE UTILITIES
+      // ============================================================================
+      function normalizeDate(dateStr) {
+        if (!dateStr || dateStr.trim() === "") return null;
+
+        // Clean the string
+        dateStr = dateStr.trim();
+
+        // Check if it's already in ISO format (YYYY-MM-DD)
+        if (/^\d{4}-\d{2}-\d{2}$/.test(dateStr)) {
+          const date = new Date(dateStr);
+          if (!isNaN(date.getTime())) {
+            date.setHours(0, 0, 0, 0);
+            return date.toISOString().split("T")[0];
+          }
+        }
+
+        // Try parsing DD/MM/YYYY or DD-MM-YYYY
+        const dmy = dateStr.match(/^(\d{1,2})[\/\-](\d{1,2})[\/\-](\d{4})$/);
+        if (dmy) {
+          const day = dmy[1].padStart(2, "0");
+          const month = dmy[2].padStart(2, "0");
+          const year = dmy[3];
+          const isoDate = `${year}-${month}-${day}`;
+          const date = new Date(isoDate);
+          if (!isNaN(date.getTime())) {
+            date.setHours(0, 0, 0, 0);
+            return date.toISOString().split("T")[0];
+          }
+        }
+
+        // Try parsing YYYY/MM/DD or YYYY-MM-DD
+        const ymd = dateStr.match(/^(\d{4})[\/\-](\d{1,2})[\/\-](\d{1,2})$/);
+        if (ymd) {
+          const year = ymd[1];
+          const month = ymd[2].padStart(2, "0");
+          const day = ymd[3].padStart(2, "0");
+          const isoDate = `${year}-${month}-${day}`;
+          const date = new Date(isoDate);
+          if (!isNaN(date.getTime())) {
+            date.setHours(0, 0, 0, 0);
+            return date.toISOString().split("T")[0];
+          }
+        }
+
+        // Try parsing with Date object (fallback)
+        const date = new Date(dateStr);
+        if (!isNaN(date.getTime())) {
+          date.setHours(0, 0, 0, 0);
+          return date.toISOString().split("T")[0];
+        }
+
+        console.warn(`Could not parse date: ${dateStr}`);
+        return null;
+      }
+
+      function formatDate(dateStr) {
+        if (!dateStr) return "-";
+        const date = new Date(dateStr);
+        if (isNaN(date.getTime())) return dateStr;
+        return date.toLocaleDateString("en-CA");
+      }
+
+      function daysBetween(date1, date2) {
+        const d1 = new Date(date1);
+        const d2 = new Date(date2);
+        d1.setHours(0, 0, 0, 0);
+        d2.setHours(0, 0, 0, 0);
+        const diff = d2.getTime() - d1.getTime();
+        return Math.floor(diff / MS_IN_DAY);
+      }
+
+      function calculateMidpoint(startStr, endStr) {
+        if (!startStr || !endStr) return null;
+
+        const start = new Date(startStr);
+        const end = new Date(endStr);
+
+        if (isNaN(start.getTime()) || isNaN(end.getTime())) return null;
+
+        const midpoint = new Date((start.getTime() + end.getTime()) / 2);
+        midpoint.setHours(0, 0, 0, 0);
+        return midpoint.toISOString().split("T")[0];
+      }
+
+      // ============================================================================
+      // COMPLIANCE LOGIC - FIXED
+      // ============================================================================
+      function getDateStatus(
+        dateStr,
+        isIntermediate = false,
+        isCompleted = false
+      ) {
+        if (!dateStr)
+          return {
+            status: "valid",
+            label: "No date",
+            color: "gray",
+            daysUntil: null,
+          };
+
+        const date = new Date(dateStr);
+        if (isNaN(date.getTime()))
+          return {
+            status: "valid",
+            label: "Invalid",
+            color: "gray",
+            daysUntil: null,
+          };
+
+        const daysUntil = daysBetween(
+          TODAY.toISOString().split("T")[0],
+          dateStr
+        );
+
+        // Special case: Intermediate completed - ALWAYS GREEN
+        if (isIntermediate && isCompleted) {
+          return {
+            status: "valid",
+            label: "Completed",
+            color: "green",
+            daysUntil: daysUntil,
+          };
+        }
+
+        // Expired/Overdue
+        if (daysUntil < 0) {
+          return {
+            status: "expired",
+            label: isIntermediate ? "Overdue" : "Expired",
+            color: "red",
+            daysUntil: Math.abs(daysUntil),
+          };
+        }
+
+        // Coming due (within 90 days)
+        if (daysUntil <= WARNING_DAYS) {
+          const labelText = daysUntil === 0 ? "Today" : `${daysUntil} days`;
+          return {
+            status: "coming",
+            label: labelText,
+            color: "amber",
+            daysUntil: daysUntil,
+          };
+        }
+
+        // Valid (more than 90 days away)
+        return {
+          status: "valid",
+          label: "Valid",
+          color: "green",
+          daysUntil: daysUntil,
+        };
+      }
+
+      function getCertStatus(certData) {
+        if (!certData)
+          return {
+            status: "valid",
+            label: "No data",
+            color: "gray",
+          };
+
+        const expiryStatus = getDateStatus(certData.expiry, false, false);
+        const intermediateStatus = getDateStatus(
+          certData.intermediateDue,
+          true,
+          certData.intermediateCompleted
+        );
+
+        // Most critical status wins
+        const statusPriority = { expired: 3, coming: 2, valid: 1, unknown: 0 };
+
+        const finalStatus = [expiryStatus, intermediateStatus]
+          .filter((s) => s.status !== "unknown")
+          .sort(
+            (a, b) => statusPriority[b.status] - statusPriority[a.status]
+          )[0];
+
+        return (
+          finalStatus || { status: "valid", label: "No dates", color: "gray" }
+        );
+      }
+
+      function getVesselStatus(vessel) {
+        if (!vessel) return { status: "valid", label: "No vessel" };
+
+        const certStatuses = CERTS.map((cert) => getCertStatus(vessel[cert]));
+        const statusPriority = { expired: 3, coming: 2, valid: 1, unknown: 0 };
+
+        const vesselStatus = certStatuses
+          .filter((s) => s.status !== "unknown")
+          .sort(
+            (a, b) => statusPriority[b.status] - statusPriority[a.status]
+          )[0];
+
+        return vesselStatus || { status: "valid", label: "All valid" };
+      }
+
+      // ============================================================================
+      // RENDERING FUNCTIONS - FIXED
+      // ============================================================================
+      function renderAll() {
+        updateSummaryCards();
+        renderManagementTable();
+        renderOverviewTable();
+        renderChart();
+        updateCounts();
+      }
+
+      function updateSummaryCards() {
+        const counts = { valid: 0, coming: 0, expired: 0 };
+
+        vessels.forEach((vessel) => {
+          const status = getVesselStatus(vessel);
+          if (status.status in counts) {
+            counts[status.status]++;
+          }
+        });
+
+        document.getElementById("countValid").textContent = counts.valid;
+        document.getElementById("countComing").textContent = counts.coming;
+        document.getElementById("countExpired").textContent = counts.expired;
+      }
+
+      function renderManagementTable() {
+        const tbody = document.getElementById("vesselTableBody");
+        const emptyState = document.getElementById("emptyState");
+
+        if (vessels.length === 0) {
+          tbody.innerHTML = "";
+          emptyState.classList.remove("hidden");
+          return;
+        }
+
+        emptyState.classList.add("hidden");
+
+        // Filter vessels if needed
+        let filteredVessels = vessels;
+        if (currentFilter) {
+          filteredVessels = vessels.filter((vessel) => {
+            const status = getVesselStatus(vessel);
+            return status.status === currentFilter;
+          });
+        }
+
+        // Update counts
+        document.getElementById("filteredCount").textContent =
+          filteredVessels.length;
+        document.getElementById("totalVessels").textContent = vessels.length;
+
+        // Sort by status priority then name
+        filteredVessels.sort((a, b) => {
+          const statusPriority = { expired: 3, coming: 2, valid: 1 };
+          const aStatus = getVesselStatus(a);
+          const bStatus = getVesselStatus(b);
+
+          const aPriority = statusPriority[aStatus.status] || 0;
+          const bPriority = statusPriority[bStatus.status] || 0;
+
+          if (aPriority !== bPriority) {
+            return bPriority - aPriority;
+          }
+
+          return a.name.localeCompare(b.name);
+        });
+
+        // Render rows
+        tbody.innerHTML = "";
+
+        filteredVessels.forEach((vessel) => {
+          const vesselStatus = getVesselStatus(vessel);
+          const row = document.createElement("tr");
+          row.className =
+            "hover:bg-gray-50 dark:hover:bg-gray-700 smooth-transition";
+
+          let rowClass = "";
+          switch (vesselStatus.status) {
+            case "expired":
+              rowClass = "status-expired";
+              break;
+            case "coming":
+              rowClass = "status-coming";
+              break;
+            case "valid":
+              rowClass = "status-valid";
+              break;
+          }
+
+          // Vessel name cell
+          const nameCell = document.createElement("td");
+          nameCell.className = `p-3 align-top ${rowClass} rounded-l-lg`;
+          nameCell.innerHTML = `
+                    <div class="font-medium">${escapeHtml(vessel.name)}</div>
+                    <div class="text-xs text-gray-500 dark:text-gray-400 mt-1">
+                        ID: ${vessel.id?.slice(-6) || "N/A"}
+                    </div>
+                `;
+          row.appendChild(nameCell);
+
+          // Certification cells
+          CERTS.forEach((cert) => {
+            const certData = vessel[cert] || {};
+            const certCell = document.createElement("td");
+            certCell.className = "p-3 align-top text-sm";
+
+            const issue = certData.issue ? formatDate(certData.issue) : "-";
+            const iDue = certData.intermediateDue
+              ? formatDate(certData.intermediateDue)
+              : "-";
+            const expiry = certData.expiry ? formatDate(certData.expiry) : "-";
+
+            // Get status for Intermediate
+            const iStatus = getDateStatus(
+              certData.intermediateDue,
+              true,
+              certData.intermediateCompleted
+            );
+
+            // Get status for Expiry
+            const eStatus = getDateStatus(certData.expiry, false, false);
+
+            let iLabel = iDue;
+            let iClass = "text-gray-600 dark:text-gray-400";
+            let iIcon = "";
+
+            if (certData.intermediateDue) {
+              if (certData.intermediateCompleted) {
+                iIcon = "✓ ";
+                iClass = "text-green-600 dark:text-green-400 font-semibold";
+              } else if (iStatus.status === "expired") {
+                iIcon = "✗ ";
+                iClass = "text-red-600 dark:text-red-400 font-semibold";
+              } else if (iStatus.status === "coming") {
+                iIcon = "⚠ ";
+                iClass = "text-amber-600 dark:text-amber-400 font-semibold";
+              } else {
+                iClass = "text-green-600 dark:text-green-400";
+              }
+            }
+
+            let eClass = "text-gray-600 dark:text-gray-400";
+            let eIcon = "";
+
+            if (eStatus.status === "expired") {
+              eIcon = "✗ ";
+              eClass = "text-red-600 dark:text-red-400 font-bold";
+            } else if (eStatus.status === "coming") {
+              eIcon = "⚠ ";
+              eClass = "text-amber-600 dark:text-amber-400 font-semibold";
+            } else if (eStatus.status === "valid") {
+              eClass = "text-green-600 dark:text-green-400";
+            }
+
+            certCell.innerHTML = `
+                        <div class="flex flex-col gap-1">
+                            <div class="text-xs">
+                                <span class="text-gray-500 dark:text-gray-400">Issue:</span>
+                                <span class="ml-1">${issue}</span>
+                            </div>
+                            <div class="text-xs">
+                                <span class="text-gray-500 dark:text-gray-400">Int:</span>
+                                <span class="ml-1 ${iClass}">${iIcon}${iLabel}</span>
+                            </div>
+                            <div class="text-xs">
+                                <span class="text-gray-500 dark:text-gray-400">Exp:</span>
+                                <span class="ml-1 ${eClass}">${eIcon}${expiry}</span>
+                            </div>
+                        </div>
+                    `;
+            row.appendChild(certCell);
+          });
+
+          // Actions cell
+          const actionsCell = document.createElement("td");
+          actionsCell.className = "p-3 align-top rounded-r-lg";
+          actionsCell.innerHTML = `
+                    <div class="flex gap-2">
+                        <button onclick="editVessel('${vessel.id}')" 
+                                class="px-3 py-1 text-sm bg-blue-100 dark:bg-blue-900 text-blue-700 dark:text-blue-300 rounded hover:bg-blue-200 dark:hover:bg-blue-800 smooth-transition">
+                            Edit
+                        </button>
+                        <button onclick="deleteVessel('${vessel.id}')" 
+                                class="px-3 py-1 text-sm bg-red-100 dark:bg-red-900 text-red-700 dark:text-red-300 rounded hover:bg-red-200 dark:hover:bg-red-800 smooth-transition">
+                            Delete
+                        </button>
+                    </div>
+                `;
+          row.appendChild(actionsCell);
+
+          tbody.appendChild(row);
+        });
+      }
+
+      function renderOverviewTable() {
+        const tbody = document.getElementById("overviewTableBody");
+
+        // Sort vessels by name
+        const sortedVessels = [...vessels].sort((a, b) =>
+          a.name.localeCompare(b.name)
+        );
+
+        tbody.innerHTML = "";
+
+        sortedVessels.forEach((vessel) => {
+          const row = document.createElement("tr");
+          row.className = "hover:bg-gray-50 dark:hover:bg-gray-700";
+
+          // Vessel name
+          const nameCell = document.createElement("td");
+          nameCell.className =
+            "p-3 font-medium sticky left-0 bg-white dark:bg-gray-800 border-r border-gray-200 dark:border-gray-700";
+          nameCell.textContent = escapeHtml(vessel.name);
+          row.appendChild(nameCell);
+
+          // Certification dates
+          CERTS.forEach((cert) => {
+            const certData = vessel[cert] || {};
+
+            // Issue date (always neutral - never highlighted)
+            const issueCell = createOverviewDateCell(
+              certData.issue,
+              false,
+              false,
+              true // isIssueDate = true (never highlight)
+            );
+            row.appendChild(issueCell);
+
+            // Intermediate date (highlight based on status)
+            const intermediateCell = createOverviewDateCell(
+              certData.intermediateDue,
+              true,
+              certData.intermediateCompleted,
+              false // isIssueDate = false
+            );
+            row.appendChild(intermediateCell);
+
+            // Expiry date (highlight based on status)
+            const expiryCell = createOverviewDateCell(
+              certData.expiry,
+              false,
+              false,
+              false // isIssueDate = false
+            );
+            row.appendChild(expiryCell);
+          });
+
+          tbody.appendChild(row);
+        });
+      }
+
+      function createOverviewDateCell(
+        dateStr,
+        isIntermediate = false,
+        isCompleted = false,
+        isIssueDate = false
+      ) {
+        const cell = document.createElement("td");
+        cell.className = "p-3 text-center text-sm";
+
+        if (!dateStr) {
+          cell.textContent = "-";
+          cell.classList.add("text-gray-400");
+          return cell;
+        }
+
+        const formattedDate = formatDate(dateStr);
+        const status = getDateStatus(dateStr, isIntermediate, isCompleted);
+
+        // Issue dates are NEVER highlighted
+        if (isIssueDate) {
+          cell.textContent = formattedDate;
+          cell.title = `Issue Date: ${formattedDate}`;
+          cell.classList.add("text-gray-600", "dark:text-gray-400");
+          return cell;
+        }
+
+        // Show days remaining if enabled and status is coming due
+        let displayText = formattedDate;
+        if (
+          showDaysRemaining &&
+          status.daysUntil !== null &&
+          status.status === "coming"
+        ) {
+          displayText = `${formattedDate} (${status.daysUntil}d)`;
+        }
+
+        cell.textContent = displayText;
+        cell.title = `${status.label} • ${formattedDate}`;
+
+        // Apply color coding based on status
+        switch (status.status) {
+          case "valid":
+            cell.classList.add("status-valid");
+            if (isIntermediate && isCompleted) {
+              cell.innerHTML = `✓ ${displayText}`;
+              cell.classList.add("font-semibold");
+            } else {
+              cell.textContent = displayText;
+            }
+            break;
+          case "coming":
+            cell.classList.add("status-coming", "font-semibold");
+            cell.innerHTML = `⚠ ${displayText}`;
+            break;
+          case "expired":
+            cell.classList.add("status-expired", "font-bold");
+            cell.innerHTML = `✗ ${displayText}`;
+            break;
+          default:
+            cell.textContent = displayText;
+            cell.classList.add("text-gray-400");
+        }
+
+        cell.classList.add("rounded");
+
+        return cell;
+      }
+
+      function renderChart() {
+        const canvas = document.getElementById("donutChart");
+        const ctx = canvas.getContext("2d");
+        const isDark = document.documentElement.classList.contains("dark");
+
+        // Clear canvas
+        ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+        // Calculate data - FIXED to include all statuses
+        const counts = { valid: 0, coming: 0, expired: 0 };
+        vessels.forEach((vessel) => {
+          const status = getVesselStatus(vessel);
+          if (status.status in counts) {
+            counts[status.status]++;
+          }
+        });
+
+        const data = [counts.valid, counts.coming, counts.expired];
+        const labels = ["Compliant", "Coming Due", "Expired"];
+        const colors = isDark
+          ? ["#10b981", "#f59e0b", "#ef4444"] // Dark mode colors
+          : ["#34d399", "#fbbf24", "#f87171"]; // Light mode colors
+
+        const total = data.reduce((a, b) => a + b, 0);
+
+        // Chart dimensions
+        const centerX = canvas.width / 2;
+        const centerY = canvas.height / 2;
+        const radius = Math.min(centerX, centerY) - 40;
+        const holeRadius = radius * 0.6;
+
+        // Reset segments for click detection
+        chartSegments = [];
+
+        if (total === 0) {
+          // Draw empty state
+          ctx.fillStyle = isDark ? "#6b7280" : "#9ca3af";
+          ctx.font = "14px Inter";
+          ctx.textAlign = "center";
+          ctx.textBaseline = "middle";
+          ctx.fillText("No data available", centerX, centerY);
+          return;
+        }
+
+        let startAngle = 0;
+
+        // Draw segments
+        data.forEach((value, index) => {
+          if (value === 0) return;
+
+          const sliceAngle = (value / total) * 2 * Math.PI;
+          const endAngle = startAngle + sliceAngle;
+          const midAngle = startAngle + sliceAngle / 2;
+
+          // Draw outer segment
+          ctx.beginPath();
+          ctx.moveTo(
+            centerX + Math.cos(startAngle) * holeRadius,
+            centerY + Math.sin(startAngle) * holeRadius
+          );
+          ctx.arc(centerX, centerY, radius, startAngle, endAngle);
+          ctx.lineTo(
+            centerX + Math.cos(endAngle) * holeRadius,
+            centerY + Math.sin(endAngle) * holeRadius
+          );
+          ctx.arc(centerX, centerY, holeRadius, endAngle, startAngle, true);
+          ctx.closePath();
+
+          ctx.fillStyle = colors[index];
+          ctx.fill();
+
+          // Store segment for click detection
+          chartSegments.push({
+            startAngle: startAngle,
+            endAngle: endAngle,
+            outerRadius: radius,
+            innerRadius: holeRadius,
+            color: colors[index],
+            filter: ["valid", "coming", "expired"][index],
+            value: value,
+            percentage: Math.round((value / total) * 100),
+          });
+
+          // Draw value label in the segment
+          const labelRadius = (radius + holeRadius) / 2;
+          const labelX = centerX + Math.cos(midAngle) * labelRadius;
+          const labelY = centerY + Math.sin(midAngle) * labelRadius;
+
+          ctx.fillStyle = isDark ? "#f3f4f6" : "#1f2937";
+          ctx.font = "bold 12px Inter";
+          ctx.textAlign = "center";
+          ctx.textBaseline = "middle";
+          ctx.fillText(`${value}`, labelX, labelY);
+
+          startAngle = endAngle;
+        });
+
+        // Draw center text
+        ctx.fillStyle = isDark ? "#f3f4f6" : "#1f2937";
+        ctx.font = "bold 16px Inter";
+        ctx.textAlign = "center";
+        ctx.textBaseline = "middle";
+        ctx.fillText("Total", centerX, centerY - 10);
+        ctx.font = "bold 24px Inter";
+        ctx.fillText(total.toString(), centerX, centerY + 15);
+
+        // Draw legend
+        const legendX = 20;
+        let legendY = canvas.height - 80;
+
+        labels.forEach((label, index) => {
+          if (data[index] === 0) return;
+
+          // Color box
+          ctx.fillStyle = colors[index];
+          ctx.fillRect(legendX, legendY, 12, 12);
+
+          // Label with percentage
+          ctx.fillStyle = isDark ? "#f3f4f6" : "#1f2937";
+          ctx.font = "12px Inter";
+          ctx.textAlign = "left";
+          const percentage = Math.round((data[index] / total) * 100);
+          ctx.fillText(
+            `${label}: ${data[index]} (${percentage}%)`,
+            legendX + 20,
+            legendY + 10
+          );
+
+          legendY += 20;
+        });
+      }
+
+      // ============================================================================
+      // EVENT HANDLERS AND INTERACTIONS
+      // ============================================================================
+      function setupEventListeners() {
+        // Navigation
+        document
+          .getElementById("navManagement")
+          .addEventListener("click", () => switchView("management"));
+        document
+          .getElementById("navOverview")
+          .addEventListener("click", () => switchView("overview"));
+        document
+          .getElementById("navImportExport")
+          .addEventListener("click", () => switchView("importExport"));
+
+        // Form
+        document
+          .getElementById("vesselForm")
+          .addEventListener("submit", handleFormSubmit);
+        document
+          .getElementById("clearForm")
+          .addEventListener("click", clearForm);
+        document
+          .getElementById("cancelEdit")
+          .addEventListener("click", cancelEdit);
+
+        // Summary cards filtering
+        document.querySelectorAll(".summary-card").forEach((card) => {
+          card.addEventListener("click", function () {
+            const filter = this.dataset.filter;
+            if (currentFilter === filter) {
+              clearFilter();
+            } else {
+              setFilter(filter);
+            }
+          });
+        });
+
+        // Clear filter button
+        document
+          .getElementById("clearFilter")
+          .addEventListener("click", clearFilter);
+
+        // Toggle days remaining
+        document
+          .getElementById("toggleDays")
+          .addEventListener("click", toggleDaysRemaining);
+        document
+          .getElementById("toggleDaysOverview")
+          .addEventListener("click", toggleDaysRemaining);
+
+        // Chart click detection
+        document
+          .getElementById("donutChart")
+          .addEventListener("click", handleChartClick);
+
+        // Import/Export
+        document.getElementById("browseFile").addEventListener("click", () => {
+          document.getElementById("csvFileInput").click();
+        });
+
+        document
+          .getElementById("csvFileInput")
+          .addEventListener("change", handleFileSelect);
+        document
+          .getElementById("exportCSV")
+          .addEventListener("click", exportCSV);
+        document
+          .getElementById("exportPDF")
+          .addEventListener("click", exportPDF);
+        document
+          .getElementById("exportOverview")
+          .addEventListener("click", exportOverviewPDF);
+        document
+          .getElementById("clearAllData")
+          .addEventListener("click", clearAllData);
+
+        // Import modal
+        document
+          .getElementById("cancelImport")
+          .addEventListener("click", cancelImport);
+        document
+          .getElementById("confirmImport")
+          .addEventListener("click", confirmImport);
+      }
+
+      function switchView(viewName) {
+        // Update active navigation
+        document.querySelectorAll('[id^="nav"]').forEach((nav) => {
+          nav.classList.remove(
+            "active-view",
+            "border-maritime-500",
+            "text-maritime-600",
+            "dark:text-maritime-400"
+          );
+        });
+
+        const activeNav = document.getElementById(
+          `nav${viewName.charAt(0).toUpperCase() + viewName.slice(1)}`
+        );
+        if (activeNav) {
+          activeNav.classList.add(
+            "active-view",
+            "border-maritime-500",
+            "text-maritime-600",
+            "dark:text-maritime-400"
+          );
+        }
+
+        // Show selected view
+        document.querySelectorAll(".view-content").forEach((view) => {
+          view.classList.add("hidden");
+        });
+
+        const activeView = document.getElementById(
+          `view${viewName.charAt(0).toUpperCase() + viewName.slice(1)}`
+        );
+        if (activeView) {
+          activeView.classList.remove("hidden");
+          currentView = viewName;
+
+          // Refresh view-specific content
+          if (viewName === "overview") {
+            renderOverviewTable();
+          } else if (viewName === "management") {
+            renderManagementTable();
+          }
+        }
+      }
+
+      function handleFormSubmit(event) {
+        event.preventDefault();
+
+        const vesselName = document.getElementById("vesselName").value.trim();
+
+        if (!vesselName) {
+          showNotification("Vessel name is required", "error");
+          return;
+        }
+
+        // Prepare vessel data
+        const vesselData = {
+          id: editId || generateId(),
+          name: vesselName,
+          createdAt: new Date().toISOString(),
+        };
+
+        CERTS.forEach((cert) => {
+          const issue = normalizeDate(
+            document.getElementById(`${cert}-issue`).value
+          );
+          const expiry = normalizeDate(
+            document.getElementById(`${cert}-expiry`).value
+          );
+          let intermediateDue = normalizeDate(
+            document.getElementById(`${cert}-intermediateDue`).value
+          );
+          const intermediateCompleted = document.getElementById(
+            `${cert}-intermediateCompleted`
+          ).checked;
+
+          // Validate required dates
+          if (!issue || !expiry) {
+            showNotification(
+              `${CERT_SHORT[cert]} requires both issue and expiry dates`,
+              "error"
+            );
+            throw new Error("Validation failed");
+          }
+
+          // Auto-calculate intermediate if not provided
+          if (!intermediateDue && issue && expiry) {
+            intermediateDue = calculateMidpoint(issue, expiry);
+          }
+
+          vesselData[cert] = {
+            issue: issue,
+            expiry: expiry,
+            intermediateDue: intermediateDue,
+            intermediateCompleted: intermediateCompleted,
+          };
+        });
+
+        // Update or add vessel
+        if (editId) {
+          const index = vessels.findIndex((v) => v.id === editId);
+          if (index !== -1) {
+            vessels[index] = vesselData;
+          }
+        } else {
+          vessels.push(vesselData);
+        }
+
+        // Save and refresh
+        saveData();
+        clearForm();
+        renderAll();
+
+        // Show success feedback
+        showNotification(
+          editId ? "Vessel updated successfully" : "Vessel added successfully",
+          "success"
+        );
+      }
+
+      function editVessel(vesselId) {
+        const vessel = vessels.find((v) => v.id === vesselId);
+        if (!vessel) return;
+
+        editId = vesselId;
+        document.getElementById(
+          "formTitle"
+        ).textContent = `✏️ Edit ${vessel.name}`;
+        document.getElementById("vesselName").value = vessel.name;
+        document.getElementById("cancelEdit").classList.remove("hidden");
+
+        // Fill certification data
+        CERTS.forEach((cert) => {
+          const certData = vessel[cert] || {};
+          document.getElementById(`${cert}-issue`).value = certData.issue || "";
+          document.getElementById(`${cert}-expiry`).value =
+            certData.expiry || "";
+          document.getElementById(`${cert}-intermediateDue`).value =
+            certData.intermediateDue || "";
+          document.getElementById(`${cert}-intermediateCompleted`).checked =
+            certData.intermediateCompleted || false;
+
+          // Trigger auto-calculation if intermediate is empty
+          if (!certData.intermediateDue && certData.issue && certData.expiry) {
+            const midpoint = calculateMidpoint(certData.issue, certData.expiry);
+            if (midpoint) {
+              document.getElementById(`${cert}-intermediateDue`).value =
+                midpoint;
+            }
+          }
+        });
+
+        // Switch to management view and scroll to form
+        switchView("management");
+        document
+          .getElementById("vesselForm")
+          .scrollIntoView({ behavior: "smooth" });
+      }
+
+      function deleteVessel(vesselId) {
+        if (
+          !confirm(
+            "Are you sure you want to delete this vessel? This action cannot be undone."
+          )
+        ) {
+          return;
+        }
+
+        const vesselIndex = vessels.findIndex((v) => v.id === vesselId);
+        if (vesselIndex !== -1) {
+          const vesselName = vessels[vesselIndex].name;
+          vessels.splice(vesselIndex, 1);
+          saveData();
+          renderAll();
+
+          showNotification(`Deleted vessel: ${vesselName}`, "warning");
+        }
+      }
+
+      function clearForm() {
+        document.getElementById("vesselForm").reset();
+        editId = null;
+        document.getElementById("formTitle").textContent = "➕ Add New Vessel";
+        document.getElementById("cancelEdit").classList.add("hidden");
+      }
+
+      function cancelEdit() {
+        clearForm();
+      }
+
+      function setFilter(filter) {
+        currentFilter = filter;
+        document.querySelectorAll(".summary-card").forEach((card) => {
+          if (card.dataset.filter === filter) {
+            card.classList.add("ring-2", "ring-maritime-500");
+          } else {
+            card.classList.remove("ring-2", "ring-maritime-500");
+          }
+        });
+
+        renderManagementTable();
+      }
+
+      function clearFilter() {
+        currentFilter = null;
+        document.querySelectorAll(".summary-card").forEach((card) => {
+          card.classList.remove("ring-2", "ring-maritime-500");
+        });
+
+        renderManagementTable();
+      }
+
+      function toggleDaysRemaining() {
+        showDaysRemaining = !showDaysRemaining;
+
+        const buttonText = showDaysRemaining
+          ? "Hide Days Remaining"
+          : "Show Days Remaining";
+        document.getElementById("toggleDays").textContent = buttonText;
+        document.getElementById("toggleDaysOverview").textContent = buttonText;
+
+        if (currentView === "overview") {
+          renderOverviewTable();
+        }
+      }
+
+      function handleChartClick(event) {
+        const canvas = event.target;
+        const rect = canvas.getBoundingClientRect();
+        const x = event.clientX - rect.left;
+        const y = event.clientY - rect.top;
+
+        const centerX = canvas.width / 2;
+        const centerY = canvas.height / 2;
+        const dx = x - centerX;
+        const dy = y - centerY;
+        const distance = Math.sqrt(dx * dx + dy * dy);
+        const angle = Math.atan2(dy, dx);
+
+        // Normalize angle to 0-2π
+        const normalizedAngle = angle < 0 ? angle + 2 * Math.PI : angle;
+
+        // Check if click is within any segment
+        for (const segment of chartSegments) {
+          if (
+            distance >= segment.innerRadius &&
+            distance <= segment.outerRadius &&
+            normalizedAngle >= segment.startAngle &&
+            normalizedAngle <= segment.endAngle
+          ) {
+            if (currentFilter === segment.filter) {
+              clearFilter();
+            } else {
+              setFilter(segment.filter);
+            }
+            return;
+          }
+        }
+      }
+
+      // ============================================================================
+      // IMPORT/EXPORT FUNCTIONS - FIXED
+      // ============================================================================
+      function handleFileSelect(event) {
+        const file = event.target.files[0];
+        if (!file) return;
+
+        if (!file.name.toLowerCase().endsWith(".csv")) {
+          alert("Please select a CSV file");
+          return;
+        }
+
+        const reader = new FileReader();
+        reader.onload = function (e) {
+          processCSV(e.target.result);
+        };
+        reader.onerror = function (e) {
+          console.error("File reading error:", e);
+          alert("Error reading file. Please try again.");
+        };
+        reader.readAsText(file, "UTF-8");
+      }
+
+      function processCSV(csvText) {
+        const modal = document.getElementById("importModal");
+        const status = document.getElementById("importStatus");
+        const progress = document.getElementById("importProgress");
+        const progressBar = document.getElementById("importProgressBar");
+        const results = document.getElementById("importResults");
+        const added = document.getElementById("importAdded");
+        const updated = document.getElementById("importUpdated");
+        const confirmBtn = document.getElementById("confirmImport");
+
+        // Reset modal
+        modal.classList.remove("hidden");
+        results.classList.add("hidden");
+        confirmBtn.classList.add("hidden");
+        status.textContent = "Parsing CSV file...";
+        progress.textContent = "0/0";
+        progressBar.style.width = "0%";
+
+        setTimeout(() => {
+          try {
+            const lines = csvText.trim().split("\n");
+            if (lines.length < 2) {
+              throw new Error("CSV file is empty or has no data rows");
+            }
+
+            // Parse headers
+            const headers = lines[0]
+              .toLowerCase()
+              .split(",")
+              .map((h) => h.trim());
+
+            // Check for required name column
+            if (!headers.includes("name")) {
+              throw new Error('CSV must contain a "name" column');
+            }
+
+            // Process rows
+            const newVessels = [];
+            const errors = [];
+
+            for (let i = 1; i < lines.length; i++) {
+              // Update progress
+              status.textContent = `Processing row ${i} of ${lines.length - 1}`;
+              progress.textContent = `${i}/${lines.length - 1}`;
+              progressBar.style.width = `${(i / (lines.length - 1)) * 100}%`;
+
+              const line = lines[i];
+              if (!line.trim()) continue;
+
+              // Parse CSV line (handling quoted values with commas)
+              const values = parseCSVLine(line);
+              const rowData = {};
+
+              headers.forEach((header, index) => {
+                if (index < values.length) {
+                  rowData[header] = values[index].trim();
+                }
+              });
+
+              // Validate required fields
+              if (!rowData.name) {
+                errors.push(`Row ${i + 1}: Missing vessel name`);
+                continue;
+              }
+
+              // Create vessel object
+              const vessel = {
+                id: generateId(),
+                name: rowData.name,
+                createdAt: new Date().toISOString(),
+              };
+
+              // Process each certification
+              CERTS.forEach((cert) => {
+                const certData = {};
+
+                // Get dates with various possible column names
+                const dateFields = [
+                  `${cert}_issue`,
+                  `${cert}_expiry`,
+                  `${cert}_intermediatedue`,
+                  `${cert}_intermediate_due`,
+                  `${cert}intermediatedue`,
+                ];
+
+                // Find issue date
+                let issueDate = null;
+                for (const field of dateFields.filter((f) =>
+                  f.includes("issue")
+                )) {
+                  if (rowData[field]) {
+                    issueDate = normalizeDate(rowData[field]);
+                    if (issueDate) break;
+                  }
+                }
+
+                // Find expiry date
+                let expiryDate = null;
+                for (const field of dateFields.filter((f) =>
+                  f.includes("expiry")
+                )) {
+                  if (rowData[field]) {
+                    expiryDate = normalizeDate(rowData[field]);
+                    if (expiryDate) break;
+                  }
+                }
+
+                // Find intermediate due date
+                let intermediateDue = null;
+                for (const field of dateFields.filter((f) =>
+                  f.includes("intermediate")
+                )) {
+                  if (rowData[field]) {
+                    intermediateDue = normalizeDate(rowData[field]);
+                    if (intermediateDue) break;
+                  }
+                }
+
+                // Get intermediate completed status
+                let intermediateCompleted = false;
+                const completedFields = [
+                  `${cert}_intermediatecompleted`,
+                  `${cert}_intermediate_completed`,
+                  `${cert}intermediatecompleted`,
+                ];
+
+                for (const field of completedFields) {
+                  if (rowData[field] !== undefined) {
+                    const val = rowData[field].toString().toLowerCase().trim();
+                    intermediateCompleted = [
+                      "true",
+                      "yes",
+                      "y",
+                      "1",
+                      "completed",
+                    ].includes(val);
+                    if (intermediateCompleted) break;
+                  }
+                }
+
+                // Calculate intermediate if not provided but issue and expiry exist
+                if (!intermediateDue && issueDate && expiryDate) {
+                  intermediateDue = calculateMidpoint(issueDate, expiryDate);
+                }
+
+                certData.issue = issueDate;
+                certData.expiry = expiryDate;
+                certData.intermediateDue = intermediateDue;
+                certData.intermediateCompleted = intermediateCompleted;
+
+                vessel[cert] = certData;
+              });
+
+              newVessels.push(vessel);
+            }
+
+            if (newVessels.length === 0) {
+              throw new Error("No valid vessels found in CSV file");
+            }
+
+            // Show results
+            added.textContent = newVessels.length;
+            updated.textContent = 0;
+
+            results.classList.remove("hidden");
+            confirmBtn.classList.remove("hidden");
+
+            // Store imported data temporarily
+            window.tempImportedVessels = newVessels;
+            window.tempImportErrors = errors;
+
+            if (errors.length > 0) {
+              status.textContent = `Completed with ${errors.length} error(s)`;
+              console.warn("Import errors:", errors);
+            } else {
+              status.textContent = "Ready to import";
+            }
+          } catch (error) {
+            status.textContent = `Error: ${error.message}`;
+            setTimeout(() => {
+              modal.classList.add("hidden");
+              alert(`Import failed: ${error.message}`);
+            }, 2000);
+          }
+        }, 100);
+      }
+
+      function parseCSVLine(line) {
+        const values = [];
+        let current = "";
+        let inQuotes = false;
+
+        for (let i = 0; i < line.length; i++) {
+          const char = line[i];
+          const nextChar = line[i + 1];
+
+          if (char === '"' && !inQuotes) {
+            inQuotes = true;
+          } else if (char === '"' && inQuotes && nextChar === '"') {
+            current += '"';
+            i++;
+          } else if (char === '"' && inQuotes) {
+            inQuotes = false;
+          } else if (char === "," && !inQuotes) {
+            values.push(current);
+            current = "";
+          } else {
+            current += char;
+          }
+        }
+
+        values.push(current);
+        return values;
+      }
+
+      function confirmImport() {
+        if (!window.tempImportedVessels) return;
+
+        // Merge with existing vessels (update by name)
+        const vesselMap = new Map();
+
+        // Add existing vessels to map
+        vessels.forEach((vessel) => {
+          vesselMap.set(vessel.name.toLowerCase(), vessel);
+        });
+
+        // Add/update imported vessels
+        let added = 0;
+        let updated = 0;
+
+        window.tempImportedVessels.forEach((importedVessel) => {
+          const key = importedVessel.name.toLowerCase();
+          if (vesselMap.has(key)) {
+            // Update existing vessel - preserve ID
+            const existing = vesselMap.get(key);
+            importedVessel.id = existing.id; // Keep existing ID
+            importedVessel.createdAt = existing.createdAt; // Keep original creation date
+            vesselMap.set(key, importedVessel);
+            updated++;
+          } else {
+            // Add new vessel
+            vesselMap.set(key, importedVessel);
+            added++;
+          }
+        });
+
+        // Update vessels array
+        vessels = Array.from(vesselMap.values());
+        saveData();
+
+        // Close modal and refresh
+        document.getElementById("importModal").classList.add("hidden");
+        renderAll();
+
+        // Show success message
+        showNotification(
+          `Imported ${added} new vessels, updated ${updated} existing vessels`,
+          "success"
+        );
+
+        // Clear temp data
+        delete window.tempImportedVessels;
+        delete window.tempImportErrors;
+
+        // Clear file input
+        document.getElementById("csvFileInput").value = "";
+      }
+
+      function cancelImport() {
+        document.getElementById("importModal").classList.add("hidden");
+        delete window.tempImportedVessels;
+        delete window.tempImportErrors;
+        document.getElementById("csvFileInput").value = "";
+      }
+
+      function exportCSV() {
+        if (vessels.length === 0) {
+          alert("No vessels to export");
+          return;
+        }
+
+        // Prepare CSV headers
+        const headers = ["name"];
+        CERTS.forEach((cert) => {
+          headers.push(
+            `${cert}_issue`,
+            `${cert}_expiry`,
+            `${cert}_intermediateDue`,
+            `${cert}_intermediateCompleted`
+          );
+        });
+
+        // Prepare rows
+        const rows = vessels.map((vessel) => {
+          const row = [vessel.name];
+
+          CERTS.forEach((cert) => {
+            const certData = vessel[cert] || {};
+            row.push(
+              certData.issue || "",
+              certData.expiry || "",
+              certData.intermediateDue || "",
+              certData.intermediateCompleted ? "true" : "false"
+            );
+          });
+
+          return row;
+        });
+
+        // Create CSV content
+        let csvContent = headers.join(",") + "\n";
+        rows.forEach((row) => {
+          const escapedRow = row.map((field) => {
+            if (
+              typeof field === "string" &&
+              (field.includes(",") ||
+                field.includes('"') ||
+                field.includes("\n"))
+            ) {
+              return `"${field.replace(/"/g, '""')}"`;
+            }
+            return field;
+          });
+          csvContent += escapedRow.join(",") + "\n";
+        });
+
+        // Create and trigger download
+        const blob = new Blob([csvContent], {
+          type: "text/csv;charset=utf-8;",
+        });
+        const link = document.createElement("a");
+        const url = URL.createObjectURL(blob);
+        link.setAttribute("href", url);
+        link.setAttribute(
+          "download",
+          `vessel_compliance_export_${
+            new Date().toISOString().split("T")[0]
+          }.csv`
+        );
+        link.style.visibility = "hidden";
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
+
+        showNotification(
+          `Exported ${vessels.length} vessels to CSV`,
+          "success"
+        );
+      }
+
+      function exportPDF() {
+        if (vessels.length === 0) {
+          alert("No vessels to export");
+          return;
+        }
+
+        const { jsPDF } = window.jspdf;
+        const doc = new jsPDF("landscape");
+        const dateStr = new Date().toLocaleDateString();
+
+        // Title
+        doc.setFontSize(20);
+        doc.text("Vessel Compliance Report", 14, 22);
+        doc.setFontSize(11);
+        doc.text(`Generated: ${dateStr}`, 14, 30);
+
+        // Prepare table data
+        const tableData = vessels.map((vessel) => {
+          const vesselStatus = getVesselStatus(vessel);
+          const row = [
+            vessel.name,
+            vesselStatus.label.charAt(0).toUpperCase() +
+              vesselStatus.label.slice(1),
+          ];
+
+          CERTS.forEach((cert) => {
+            const certData = vessel[cert] || {};
+            const status = getCertStatus(certData);
+            row.push(
+              certData.expiry ? formatDate(certData.expiry) : "N/A",
+              status.label
+            );
+          });
+
+          return row;
+        });
+
+        // Table headers
+        const headers = [
+          "Vessel Name",
+          "Overall Status",
+          "SMC Expiry",
+          "SMC Status",
+          "ISPS Expiry",
+          "ISPS Status",
+          "MLC Expiry",
+          "MLC Status",
+        ];
+
+        // Generate table
+        doc.autoTable({
+          head: [headers],
+          body: tableData,
+          startY: 40,
+          theme: "grid",
+          styles: {
+            fontSize: 9,
+            cellPadding: 3,
+            overflow: "linebreak",
+          },
+          headStyles: {
+            fillColor: [59, 130, 246],
+            textColor: 255,
+          },
+          alternateRowStyles: {
+            fillColor: [240, 240, 240],
+          },
+          columnStyles: {
+            0: { cellWidth: 30 },
+            1: { cellWidth: 25 },
+            2: { cellWidth: 20 },
+            3: { cellWidth: 20 },
+            4: { cellWidth: 20 },
+            5: { cellWidth: 20 },
+            6: { cellWidth: 20 },
+            7: { cellWidth: 20 },
+          },
+        });
+
+        // Save PDF
+        doc.save(
+          `vessel_compliance_report_${
+            new Date().toISOString().split("T")[0]
+          }.pdf`
+        );
+
+        showNotification("PDF report generated successfully", "success");
+      }
+
+      function exportOverviewPDF() {
+        if (vessels.length === 0) {
+          alert("No vessels to export");
+          return;
+        }
+
+        const { jsPDF } = window.jspdf;
+        const doc = new jsPDF("landscape");
+        const dateStr = new Date().toLocaleDateString();
+
+        // Title
+        doc.setFontSize(20);
+        doc.text("Compliance Overview Report", 14, 22);
+        doc.setFontSize(11);
+        doc.text(`Generated: ${dateStr}`, 14, 30);
+        doc.text(`Total Vessels: ${vessels.length}`, 14, 38);
+
+        // Prepare detailed table data
+        const tableData = vessels.map((vessel) => {
+          const row = [vessel.name];
+
+          CERTS.forEach((cert) => {
+            const certData = vessel[cert] || {};
+            row.push(
+              certData.issue ? formatDate(certData.issue) : "N/A",
+              certData.intermediateDue
+                ? formatDate(certData.intermediateDue)
+                : "N/A",
+              certData.expiry ? formatDate(certData.expiry) : "N/A"
+            );
+          });
+
+          return row;
+        });
+
+        // Detailed headers
+        const headers = [
+          "Vessel Name",
+          "SMC Issue",
+          "SMC Int.",
+          "SMC Expiry",
+          "ISPS Issue",
+          "ISPS Int.",
+          "ISPS Expiry",
+          "MLC Issue",
+          "MLC Int.",
+          "MLC Expiry",
+        ];
+
+        // Generate table
+        doc.autoTable({
+          head: [headers],
+          body: tableData,
+          startY: 45,
+          theme: "grid",
+          styles: {
+            fontSize: 8,
+            cellPadding: 2,
+            overflow: "linebreak",
+          },
+          headStyles: {
+            fillColor: [59, 130, 246],
+            textColor: 255,
+          },
+          alternateRowStyles: {
+            fillColor: [240, 240, 240],
+          },
+        });
+
+        // Save PDF
+        doc.save(
+          `compliance_overview_${new Date().toISOString().split("T")[0]}.pdf`
+        );
+
+        showNotification("Overview PDF generated successfully", "success");
+      }
+
+      function clearAllData() {
+        if (vessels.length === 0) {
+          alert("No data to clear");
+          return;
+        }
+
+        if (
+          !confirm(
+            `Are you sure you want to delete ALL ${vessels.length} vessel records? This action cannot be undone.`
+          )
+        ) {
+          return;
+        }
+
+        vessels = [];
+        saveData();
+        clearForm();
+        clearFilter();
+        renderAll();
+
+        showNotification("All vessel data has been cleared", "warning");
+      }
+
+      // ============================================================================
+      // UTILITY FUNCTIONS
+      // ============================================================================
+      function generateId() {
+        return (
+          Date.now().toString(36) + Math.random().toString(36).substr(2, 5)
+        );
+      }
+
+      function escapeHtml(text) {
+        const div = document.createElement("div");
+        div.textContent = text;
+        return div.innerHTML;
+      }
+
+      function updateLastUpdated() {
+        const now = new Date();
+        const timeStr = now.toLocaleTimeString([], {
+          hour: "2-digit",
+          minute: "2-digit",
+        });
+        const dateStr = now.toLocaleDateString();
+        document.getElementById(
+          "lastUpdated"
+        ).textContent = `${dateStr} ${timeStr}`;
+      }
+
+      function updateCounts() {
+        document.getElementById("totalVessels").textContent = vessels.length;
+        document.getElementById("filteredCount").textContent = currentFilter
+          ? vessels.filter((v) => getVesselStatus(v).status === currentFilter)
+              .length
+          : vessels.length;
+      }
+
+      function showNotification(message, type = "info") {
+        // Remove existing notification
+        const existing = document.querySelector(".notification");
+        if (existing) existing.remove();
+
+        // Create notification
+        const notification = document.createElement("div");
+        notification.className = `notification fixed top-4 right-4 px-6 py-3 rounded-lg shadow-lg smooth-transition z-50 transform translate-x-full opacity-0 ${
+          type === "success"
+            ? "bg-green-500 text-white"
+            : type === "warning"
+            ? "bg-amber-500 text-white"
+            : type === "error"
+            ? "bg-red-500 text-white"
+            : "bg-blue-500 text-white"
+        }`;
+        notification.textContent = message;
+
+        document.body.appendChild(notification);
+
+        // Animate in
+        setTimeout(() => {
+          notification.classList.remove("translate-x-full", "opacity-0");
+          notification.classList.add("translate-x-0", "opacity-100");
+        }, 10);
+
+        // Remove after 3 seconds
+        setTimeout(() => {
+          notification.classList.remove("translate-x-0", "opacity-100");
+          notification.classList.add("translate-x-full", "opacity-0");
+          setTimeout(() => {
+            if (notification.parentNode) {
+              notification.parentNode.removeChild(notification);
+            }
+          }, 300);
+        }, 3000);
+      }
+
+      // Make functions available globally for onclick handlers
+      window.editVessel = editVessel;
+      window.deleteVessel = deleteVessel;
+    </script>
+  </body>
+</html>
