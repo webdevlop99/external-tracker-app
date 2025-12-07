@@ -38,6 +38,9 @@
     <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf-autotable/3.5.29/jspdf.plugin.autotable.min.js"></script>
 
+    <!-- Supabase -->
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+
     <style>
       * {
         font-family: "Inter", system-ui, sans-serif;
@@ -183,6 +186,258 @@
       .drop-zone:hover {
         border-color: #0ea5e9;
       }
+
+      /* Truncate remarks */
+      /* Remarks styling */
+      .remarks-cell {
+        max-width: 200px;
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        cursor: pointer;
+        position: relative;
+      }
+
+      .remarks-cell:hover {
+        text-decoration: underline;
+        color: #0ea5e9;
+      }
+
+      .dark .remarks-cell:hover {
+        color: #7dd3fc;
+      }
+      /* Modern approach (better browser support) */
+      .remarks-cell-multi {
+        max-width: 200px;
+        display: -webkit-box;
+        display: -moz-box;
+        display: box;
+        -webkit-line-clamp: 3;
+        -moz-line-clamp: 3;
+        line-clamp: 3;
+        -webkit-box-orient: vertical;
+        -moz-box-orient: vertical;
+        box-orient: vertical;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        line-height: 1.4;
+        max-height: 4.2em;
+        cursor: pointer;
+        word-break: break-word;
+        white-space: normal;
+      }
+
+      .remarks-cell-multi:hover {
+        color: #0ea5e9;
+      }
+
+      .dark .remarks-cell-multi:hover {
+        color: #7dd3fc;
+      }
+
+      /* For single line remarks in overview table */
+      .remarks-cell-single {
+        max-width: 200px;
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        cursor: pointer;
+      }
+
+      .remarks-cell-single:hover {
+        color: #0ea5e9;
+        text-decoration: underline;
+      }
+
+      .dark .remarks-cell-single:hover {
+        color: #7dd3fc;
+      }
+
+      /* Make sure the cell has enough height for 3 lines */
+      td .remarks-cell-multi {
+        min-height: 4.2em;
+      }
+
+      /* Small tooltip for quick view */
+      .remarks-tooltip {
+        visibility: hidden;
+        position: absolute;
+        background: white;
+        border: 1px solid #ccc;
+        padding: 8px;
+        border-radius: 4px;
+        z-index: 100;
+        max-width: 300px;
+        box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+        white-space: normal;
+        word-wrap: break-word;
+        top: 100%;
+        left: 0;
+        opacity: 0;
+        transition: opacity 0.2s;
+        font-size: 12px;
+        max-height: 150px;
+        overflow-y: auto;
+      }
+
+      .remarks-cell:hover .remarks-tooltip {
+        visibility: visible;
+        opacity: 1;
+      }
+
+      .dark .remarks-tooltip {
+        background: #1f2937;
+        border-color: #374151;
+      }
+
+      /* Remarks Modal Styling */
+      #remarksModal {
+        backdrop-filter: blur(4px);
+      }
+
+      #remarksModal > div {
+        max-height: 80vh;
+        margin: auto;
+      }
+
+      #remarksContent {
+        max-height: 50vh;
+        overflow-y: auto;
+        padding-right: 8px;
+      }
+
+      /* Custom scrollbar for remarks content */
+      #remarksContent::-webkit-scrollbar {
+        width: 6px;
+      }
+
+      #remarksContent::-webkit-scrollbar-track {
+        background: #f1f1f1;
+        border-radius: 3px;
+      }
+
+      .dark #remarksContent::-webkit-scrollbar-track {
+        background: #374151;
+      }
+
+      #remarksContent::-webkit-scrollbar-thumb {
+        background: #9ca3af;
+        border-radius: 3px;
+      }
+
+      .dark #remarksContent::-webkit-scrollbar-thumb {
+        background: #6b7280;
+      }
+
+      /* Hidden import/export section */
+      .hidden-section {
+        display: none;
+      }
+
+      /* Password modal */
+      #passwordModal {
+        backdrop-filter: blur(4px);
+      }
+      /* Password Modal - Fixed Positioning */
+      #passwordModal {
+        backdrop-filter: blur(4px);
+        z-index: 9999;
+      }
+
+      #passwordModal.hidden {
+        display: none !important;
+      }
+
+      /* Ensure modal content is centered */
+      #passwordModal > div {
+        transform: translateY(0);
+        opacity: 1;
+        animation: modalFadeIn 0.3s ease-out;
+      }
+
+      @keyframes modalFadeIn {
+        from {
+          opacity: 0;
+          transform: translateY(-20px);
+        }
+        to {
+          opacity: 1;
+          transform: translateY(0);
+        }
+      }
+
+      /* Lock/Unlock button states */
+      #showHiddenSection.locked {
+        background-color: #fef3c7;
+        color: #92400e;
+        border: 2px solid #f59e0b;
+      }
+
+      .dark #showHiddenSection.locked {
+        background-color: #78350f;
+        color: #fde68a;
+        border: 2px solid #f59e0b;
+      }
+
+      #showHiddenSection.unlocked {
+        background-color: #dcfce7;
+        color: #166534;
+        border: 2px solid #22c55e;
+      }
+
+      .dark #showHiddenSection.unlocked {
+        background-color: #14532d;
+        color: #bbf7d0;
+        border: 2px solid #22c55e;
+      }
+
+      /* Loading animation */
+      .loading {
+        opacity: 0.7;
+        pointer-events: none;
+      }
+
+      .loading::after {
+        content: " ";
+        display: inline-block;
+        width: 20px;
+        height: 20px;
+        border: 3px solid #ccc;
+        border-radius: 50%;
+        border-top-color: #0ea5e9;
+        animation: spin 1s ease-in-out infinite;
+        margin-left: 10px;
+        vertical-align: middle;
+      }
+
+      @keyframes spin {
+        to {
+          transform: rotate(360deg);
+        }
+      }
+
+      @keyframes slideIn {
+        from {
+          transform: translateX(100%);
+          opacity: 0;
+        }
+        to {
+          transform: translateX(0);
+          opacity: 1;
+        }
+      }
+
+      /* Overview table - single line dates */
+      .overview-date {
+        white-space: nowrap;
+        font-size: 11px;
+      }
+
+      /* Compact table styling */
+      .compact-table th,
+      .compact-table td {
+        padding: 4px 8px;
+      }
     </style>
   </head>
   <body class="bg-gray-50 dark:bg-gray-900 text-gray-900 dark:text-gray-100">
@@ -206,6 +461,28 @@
             </div>
 
             <div class="flex items-center gap-4">
+              <!-- Database Status Indicator -->
+              <div
+                id="dbStatus"
+                class="text-sm px-3 py-1 rounded-full bg-gray-100 dark:bg-gray-800 hidden"
+              >
+                <span class="flex items-center gap-2">
+                  <span
+                    class="w-2 h-2 rounded-full bg-green-500 animate-pulse"
+                  ></span>
+                  <span>Online</span>
+                </span>
+              </div>
+
+              <!-- Show Hidden Section Button -->
+              <!-- In the header section, update the Show Hidden Section Button -->
+              <button
+                id="showHiddenSection"
+                class="flex items-center gap-2 px-4 py-2 bg-gray-200 dark:bg-gray-700 rounded-lg hover:bg-gray-300 dark:hover:bg-gray-600 smooth-transition"
+              >
+                🔒 Show Import/Export
+              </button>
+
               <!-- Theme Toggle -->
               <button
                 id="themeToggle"
@@ -241,7 +518,7 @@
               </button>
               <button
                 id="navImportExport"
-                class="px-4 py-3 text-sm font-medium border-b-2 border-transparent hover:border-maritime-500 hover:text-maritime-600 dark:hover:text-maritime-400 smooth-transition"
+                class="px-4 py-3 text-sm font-medium border-b-2 border-transparent hover:border-maritime-500 hover:text-maritime-600 dark:hover:text-maritime-400 smooth-transition hidden-section"
               >
                 📁 Import/Export
               </button>
@@ -344,6 +621,7 @@
                       id="vesselName"
                       required
                       class="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-gray-50 dark:bg-gray-700 focus:ring-2 focus:ring-maritime-500 focus:border-transparent"
+                      placeholder="Enter vessel name"
                     />
                   </div>
 
@@ -352,14 +630,33 @@
                     <!-- SMC, ISPS, MLC sections will be inserted here -->
                   </div>
 
+                  <!-- Remarks Section -->
+                  <div>
+                    <label class="block text-sm font-medium mb-2">
+                      Remarks / Notes
+                    </label>
+                    <textarea
+                      id="remarks"
+                      rows="3"
+                      class="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-gray-50 dark:bg-gray-700 focus:ring-2 focus:ring-maritime-500 focus:border-transparent resize-none"
+                      placeholder="Add any notes or remarks about this vessel..."
+                    ></textarea>
+                  </div>
+
                   <div
                     class="flex items-center gap-3 pt-4 border-t border-gray-200 dark:border-gray-700"
                   >
                     <button
                       type="submit"
-                      class="px-4 py-2 bg-maritime-600 text-white rounded-lg hover:bg-maritime-700 smooth-transition"
+                      id="submitButton"
+                      class="px-4 py-2 bg-maritime-600 text-white rounded-lg hover:bg-maritime-700 smooth-transition flex items-center"
                     >
-                      Save Vessel
+                      <span id="submitText">Save Vessel</span>
+                      <span id="submitSpinner" class="hidden ml-2">
+                        <div
+                          class="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin"
+                        ></div>
+                      </span>
                     </button>
                     <button
                       type="button"
@@ -385,10 +682,18 @@
               >
                 <div class="flex items-center justify-between mb-4">
                   <h3 class="text-lg font-semibold">Vessel Management</h3>
-                  <div class="text-sm text-gray-600 dark:text-gray-400">
-                    Showing
-                    <span id="filteredCount" class="font-bold">0</span> of
-                    <span id="totalVessels" class="font-bold">0</span> vessels
+                  <div class="flex items-center gap-4">
+                    <div class="text-sm text-gray-600 dark:text-gray-400">
+                      Showing
+                      <span id="filteredCount" class="font-bold">0</span> of
+                      <span id="totalVessels" class="font-bold">0</span> vessels
+                    </div>
+                    <button
+                      id="refreshData"
+                      class="text-sm text-maritime-600 dark:text-maritime-400 hover:underline flex items-center gap-1"
+                    >
+                      🔄 Refresh
+                    </button>
                   </div>
                 </div>
 
@@ -415,6 +720,11 @@
                           class="p-3 text-left text-xs font-medium uppercase tracking-wider"
                         >
                           MLC (Issue/Int/Exp)
+                        </th>
+                        <th
+                          class="p-3 text-left text-xs font-medium uppercase tracking-wider"
+                        >
+                          Remarks
                         </th>
                         <th
                           class="p-3 text-left text-xs font-medium uppercase tracking-wider"
@@ -456,87 +766,101 @@
                     status
                   </p>
                 </div>
-                <div class="flex gap-2">
+                <div class="flex gap-2 items-center">
+                  <!-- Search Bar -->
+                  <div class="relative">
+                    <input
+                      type="text"
+                      id="searchVessels"
+                      placeholder="Search vessels..."
+                      class="pl-10 pr-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-gray-50 dark:bg-gray-700 focus:ring-2 focus:ring-maritime-500 focus:border-transparent w-64"
+                    />
+                    <div class="absolute left-3 top-2.5 text-gray-400">🔍</div>
+                  </div>
                   <button
                     id="toggleDaysOverview"
                     class="px-4 py-2 bg-gray-200 dark:bg-gray-700 rounded-lg hover:bg-gray-300 dark:hover:bg-gray-600 smooth-transition text-sm"
                   >
                     Show Days Remaining
                   </button>
-                  <button
-                    id="exportOverview"
-                    class="px-4 py-2 bg-maritime-600 text-white rounded-lg hover:bg-maritime-700 smooth-transition"
-                  >
-                    Export as PDF
-                  </button>
                 </div>
               </div>
 
               <div class="overflow-x-auto">
-                <table class="w-full sticky-first-col">
+                <table class="w-full compact-table">
                   <thead class="bg-gray-50 dark:bg-gray-700">
                     <tr>
                       <th
-                        class="p-3 text-left text-xs font-medium uppercase tracking-wider border-b border-gray-200 dark:border-gray-600"
+                        class="p-2 text-left text-xs font-medium uppercase tracking-wider border-b border-gray-200 dark:border-gray-600"
                       >
                         Vessel Name
                       </th>
                       <!-- SMC -->
                       <th
                         colspan="3"
-                        class="p-3 text-center text-xs font-medium uppercase tracking-wider border-b border-gray-200 dark:border-gray-600 bg-blue-50 dark:bg-blue-900/30"
+                        class="p-2 text-center text-xs font-medium uppercase tracking-wider border-b border-gray-200 dark:border-gray-600 bg-blue-50 dark:bg-blue-900/30"
                       >
                         SMC
                       </th>
                       <!-- ISPS -->
                       <th
                         colspan="3"
-                        class="p-3 text-center text-xs font-medium uppercase tracking-wider border-b border-gray-200 dark:border-gray-600 bg-green-50 dark:bg-green-900/30"
+                        class="p-2 text-center text-xs font-medium uppercase tracking-wider border-b border-gray-200 dark:border-gray-600 bg-green-50 dark:bg-green-900/30"
                       >
                         ISPS
                       </th>
                       <!-- MLC -->
                       <th
                         colspan="3"
-                        class="p-3 text-center text-xs font-medium uppercase tracking-wider border-b border-gray-200 dark:border-gray-600 bg-purple-50 dark:bg-purple-900/30"
+                        class="p-2 text-center text-xs font-medium uppercase tracking-wider border-b border-gray-200 dark:border-gray-600 bg-purple-50 dark:bg-purple-900/30"
                       >
                         MLC
+                      </th>
+                      <!-- Remarks -->
+                      <th
+                        class="p-2 text-left text-xs font-medium uppercase tracking-wider border-b border-gray-200 dark:border-gray-600"
+                      >
+                        Remarks
                       </th>
                     </tr>
                     <tr>
                       <th
-                        class="p-3 text-left text-xs font-medium uppercase tracking-wider"
+                        class="p-2 text-left text-xs font-medium uppercase tracking-wider"
                       ></th>
                       <!-- SMC Subheaders -->
-                      <th class="p-3 text-center text-xs font-medium uppercase">
+                      <th class="p-2 text-center text-xs font-medium uppercase">
                         Issue
                       </th>
-                      <th class="p-3 text-center text-xs font-medium uppercase">
-                        Intermediate
+                      <th class="p-2 text-center text-xs font-medium uppercase">
+                        Int
                       </th>
-                      <th class="p-3 text-center text-xs font-medium uppercase">
+                      <th class="p-2 text-center text-xs font-medium uppercase">
                         Expiry
                       </th>
                       <!-- ISPS Subheaders -->
-                      <th class="p-3 text-center text-xs font-medium uppercase">
+                      <th class="p-2 text-center text-xs font-medium uppercase">
                         Issue
                       </th>
-                      <th class="p-3 text-center text-xs font-medium uppercase">
-                        Intermediate
+                      <th class="p-2 text-center text-xs font-medium uppercase">
+                        Int
                       </th>
-                      <th class="p-3 text-center text-xs font-medium uppercase">
+                      <th class="p-2 text-center text-xs font-medium uppercase">
                         Expiry
                       </th>
                       <!-- MLC Subheaders -->
-                      <th class="p-3 text-center text-xs font-medium uppercase">
+                      <th class="p-2 text-center text-xs font-medium uppercase">
                         Issue
                       </th>
-                      <th class="p-3 text-center text-xs font-medium uppercase">
-                        Intermediate
+                      <th class="p-2 text-center text-xs font-medium uppercase">
+                        Int
                       </th>
-                      <th class="p-3 text-center text-xs font-medium uppercase">
+                      <th class="p-2 text-center text-xs font-medium uppercase">
                         Expiry
                       </th>
+                      <!-- Remarks Header -->
+                      <th
+                        class="p-2 text-left text-xs font-medium uppercase"
+                      ></th>
                     </tr>
                   </thead>
                   <tbody
@@ -547,14 +871,24 @@
                   </tbody>
                 </table>
               </div>
+              <div id="noSearchResults" class="text-center py-12 hidden">
+                <div class="text-4xl mb-4">🔍</div>
+                <h4 class="text-lg font-medium mb-2">No vessels found</h4>
+                <p class="text-gray-600 dark:text-gray-400">
+                  Try a different search term
+                </p>
+              </div>
             </div>
           </div>
 
-          <!-- View 3: Import/Export -->
-          <div id="viewImportExport" class="view-content hidden">
+          <!-- View 3: Import/Export - Hidden by default -->
+          <div id="viewImportExport" class="view-content hidden hidden-section">
             <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
               <!-- Import Section -->
-              <div class="bg-white dark:bg-gray-800 rounded-xl shadow-lg p-6">
+              <div
+                id="importSection"
+                class="bg-white dark:bg-gray-800 rounded-xl shadow-lg p-6"
+              >
                 <h3 class="text-lg font-semibold mb-4">📥 Import Data</h3>
                 <div class="space-y-4">
                   <div class="drop-zone" id="dropZone">
@@ -565,16 +899,14 @@
                       class="hidden"
                     />
                     <div class="text-4xl mb-4">📁</div>
-                    <p class="mb-2">Drag & drop CSV file or click to browse</p>
+                    <p class="mb-2">Drag & drop CSV file here</p>
                     <p class="text-sm text-gray-500 dark:text-gray-400 mb-4">
                       Supports .csv files with vessel certification data
                     </p>
-                    <button
-                      id="browseFile"
-                      class="px-4 py-2 bg-maritime-600 text-white rounded-lg hover:bg-maritime-700 smooth-transition"
-                    >
-                      Browse Files
-                    </button>
+                    <div class="text-sm text-gray-600 dark:text-gray-400">
+                      <p class="mb-1">✓ Only drag & drop is supported</p>
+                      <p>✓ No click to browse available</p>
+                    </div>
                   </div>
 
                   <div class="bg-blue-50 dark:bg-blue-900/20 rounded-lg p-4">
@@ -582,7 +914,10 @@
                     <ul
                       class="text-sm text-gray-600 dark:text-gray-400 space-y-1"
                     >
-                      <li>• Required columns: <code>name</code></li>
+                      <li>
+                        • Required columns: <code>name</code>,
+                        <code>remarks</code> (optional)
+                      </li>
                       <li>
                         • Date columns: <code>smc_issue</code>,
                         <code>smc_expiry</code>,
@@ -604,7 +939,10 @@
               </div>
 
               <!-- Export Section -->
-              <div class="bg-white dark:bg-gray-800 rounded-xl shadow-lg p-6">
+              <div
+                id="exportSection"
+                class="bg-white dark:bg-gray-800 rounded-xl shadow-lg p-6"
+              >
                 <h3 class="text-lg font-semibold mb-4">📤 Export Data</h3>
                 <div class="space-y-4">
                   <button
@@ -627,9 +965,9 @@
                   >
                     <div class="text-left">
                       <div class="text-2xl mb-2">📊</div>
-                      <h4 class="font-medium">Generate PDF Report</h4>
+                      <h4 class="font-medium">Generate Compliance Report</h4>
                       <p class="text-sm text-gray-600 dark:text-gray-400">
-                        Create professional compliance report
+                        Create overview report with color-coded status
                       </p>
                     </div>
                     <div class="text-2xl">🖨️</div>
@@ -638,6 +976,12 @@
                   <div
                     class="border-t border-gray-200 dark:border-gray-700 pt-4"
                   >
+                    <button
+                      id="syncToDatabase"
+                      class="w-full p-4 bg-blue-100 dark:bg-blue-900 border border-blue-300 dark:border-blue-800 rounded-lg hover:bg-blue-200 dark:hover:bg-blue-800 smooth-transition text-blue-600 dark:text-blue-400 mb-2"
+                    >
+                      💾 Sync to Database
+                    </button>
                     <button
                       id="clearAllData"
                       class="w-full p-4 bg-gray-100 dark:bg-gray-900 border border-gray-300 dark:border-gray-700 rounded-lg hover:bg-gray-200 dark:hover:bg-gray-800 smooth-transition text-red-600 dark:text-red-400"
@@ -664,17 +1008,62 @@
             class="flex flex-col md:flex-row justify-between items-center gap-4"
           >
             <div class="text-sm text-gray-600 dark:text-gray-400">
-              <p>
-                Vessel Compliance Tracker v2.0 • Maritime Certification
-                Management
-              </p>
+              <p>Vessel External Audit Tracker</p>
               <p class="mt-1">All dates and times in UTC</p>
             </div>
             <div class="text-xs text-gray-500 dark:text-gray-500">
-              Data stored locally • Refresh to update status
+              <span id="dbSyncStatus">Database: Offline</span> • Refresh to
+              update status
             </div>
           </div>
         </footer>
+      </div>
+    </div>
+
+    <!-- Password Modal -->
+    <!-- Password Modal -->
+    <div
+      id="passwordModal"
+      class="fixed inset-0 z-50 hidden flex items-center justify-center p-4 modal-backdrop"
+    >
+      <div
+        class="bg-white dark:bg-gray-800 rounded-xl shadow-2xl max-w-md w-full p-6 mx-auto my-auto"
+      >
+        <h3 class="text-lg font-semibold mb-4">🔒 Password Required</h3>
+        <div class="space-y-4">
+          <div>
+            <label class="block text-sm font-medium mb-2">
+              Enter Password to Show Import/Export Section
+            </label>
+            <input
+              type="password"
+              id="sectionPassword"
+              class="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-gray-50 dark:bg-gray-700 focus:ring-2 focus:ring-maritime-500 focus:border-transparent"
+              placeholder="Enter password..."
+              autocomplete="off"
+            />
+            <p class="text-xs text-gray-500 dark:text-gray-400 mt-2">
+              Default password: <code>show123</code> (change for production)
+            </p>
+          </div>
+
+          <div class="flex justify-end gap-3 pt-4">
+            <button
+              id="cancelPassword"
+              type="button"
+              class="px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-700 smooth-transition"
+            >
+              Cancel
+            </button>
+            <button
+              id="submitPassword"
+              type="button"
+              class="px-4 py-2 bg-maritime-600 text-white rounded-lg hover:bg-maritime-700 smooth-transition"
+            >
+              Unlock
+            </button>
+          </div>
+        </div>
       </div>
     </div>
 
@@ -716,7 +1105,7 @@
           </div>
 
           <div id="importResults" class="hidden">
-            <div class="grid grid-cols-2 gap-4 text-sm">
+            <div class="grid grid-cols-3 gap-4 text-sm">
               <div
                 class="text-center p-3 bg-green-50 dark:bg-green-900/20 rounded-lg"
               >
@@ -739,6 +1128,17 @@
                 </p>
                 <p class="text-gray-600 dark:text-gray-400">Updated</p>
               </div>
+              <div
+                class="text-center p-3 bg-gray-100 dark:bg-gray-800 rounded-lg"
+              >
+                <p
+                  class="font-medium text-gray-700 dark:text-gray-300"
+                  id="importSkipped"
+                >
+                  0
+                </p>
+                <p class="text-gray-600 dark:text-gray-400">Skipped</p>
+              </div>
             </div>
           </div>
 
@@ -760,6 +1160,12 @@
       </div>
     </div>
 
+    <!-- Notification Container -->
+    <div
+      id="notificationContainer"
+      class="fixed top-4 right-4 z-50 space-y-2"
+    ></div>
+
     <script>
       // ============================================================================
       // CONSTANTS AND CONFIGURATION
@@ -775,21 +1181,56 @@
         isps: "ISPS",
         mlc: "MLC",
       };
-      const STORAGE_KEY = "vessel_compliance_data_v4";
+      const STORAGE_KEY = "vessel_compliance_data_v7";
       const TODAY = new Date();
       TODAY.setHours(0, 0, 0, 0);
       const MS_IN_DAY = 1000 * 60 * 60 * 24;
       const WARNING_DAYS = 90;
+
+      // Password to show hidden import/export section
+      const SECTION_PASSWORD = "show123";
+
+      // ============================================================================
+      // SUPABASE CONFIGURATION
+      // ============================================================================
+      // Replace these with your Supabase project credentials
+      const SUPABASE_URL = "https://wjaopdggrxmdvtutvurg.supabase.co";
+      const SUPABASE_ANON_KEY =
+        "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6IndqYW9wZGdncnhtZHZ0dXR2dXJnIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjQ5MzQ2NDksImV4cCI6MjA4MDUxMDY0OX0.qYS2vv2rWhmPdCECT9EKtFlm2YYcL-OYKDn2r37XFpA";
+      const TABLE_NAME = "vessels";
+
+      // Initialize Supabase client
+      let supabase = null;
+      let isSupabaseConnected = false;
+
+      if (
+        SUPABASE_URL &&
+        SUPABASE_ANON_KEY &&
+        SUPABASE_URL !== "https://your-project.supabase.co" &&
+        SUPABASE_ANON_KEY !== "your-anon-key"
+      ) {
+        supabase = window.supabase.createClient(
+          SUPABASE_URL,
+          SUPABASE_ANON_KEY
+        );
+        isSupabaseConnected = true;
+        console.log("Supabase connected");
+      } else {
+        console.warn("Supabase not configured. Using local storage only.");
+      }
 
       // ============================================================================
       // STATE MANAGEMENT
       // ============================================================================
       let vessels = [];
       let editId = null;
+      let editDbId = null;
       let currentFilter = null;
       let currentView = "management";
       let showDaysRemaining = false;
       let chartSegments = [];
+      let isHiddenSectionVisible = false;
+      let searchQuery = "";
 
       // ============================================================================
       // INITIALIZATION
@@ -798,14 +1239,371 @@
         initializeApp();
       });
 
-      function initializeApp() {
+      async function initializeApp() {
         loadData();
         initializeTheme();
         renderCertSections();
         setupEventListeners();
         setupDragAndDrop();
+        setupRemarksModal(); // Add this line
         updateLastUpdated();
-        renderAll();
+
+        // Try to load from database first
+        if (isSupabaseConnected) {
+          await loadFromDatabase();
+          updateDatabaseStatus(true);
+        } else {
+          renderAll();
+        }
+      }
+
+      // ============================================================================
+      // DATABASE FUNCTIONS
+      // ============================================================================
+      async function loadFromDatabase() {
+        if (!isSupabaseConnected) return;
+
+        try {
+          showNotification("Loading data from database...", "info");
+
+          const { data, error } = await supabase
+            .from(TABLE_NAME)
+            .select("*")
+            .order("name", { ascending: true });
+
+          if (error) {
+            console.error("Error loading from database:", error);
+            showNotification("Using local data", "warning");
+            renderAll();
+            return;
+          }
+
+          if (data && data.length > 0) {
+            // Clear existing vessels
+            vessels = [];
+
+            // Convert database format to app format
+            data.forEach((item) => {
+              const vessel = {
+                id: item.name.toLowerCase().replace(/[^a-z0-9]/g, "-"), // Create ID from name
+                db_id: item.id,
+                name: item.name,
+                remarks: item.remarks || "",
+                createdAt: item.created_at,
+                updatedAt: item.updated_at,
+                smc: {
+                  issue: item.smc_issue,
+                  expiry: item.smc_expiry,
+                  intermediateDue: item.smc_intermediate_due,
+                  intermediateCompleted:
+                    item.smc_intermediate_completed || false,
+                },
+                isps: {
+                  issue: item.isps_issue,
+                  expiry: item.isps_expiry,
+                  intermediateDue: item.isps_intermediate_due,
+                  intermediateCompleted:
+                    item.isps_intermediate_completed || false,
+                },
+                mlc: {
+                  issue: item.mlc_issue,
+                  expiry: item.mlc_expiry,
+                  intermediateDue: item.mlc_intermediate_due,
+                  intermediateCompleted:
+                    item.mlc_intermediate_completed || false,
+                },
+              };
+              vessels.push(vessel);
+            });
+
+            saveData(); // Save to local storage as backup
+            showNotification(
+              `Loaded ${vessels.length} vessels from database`,
+              "success"
+            );
+          } else {
+            showNotification(
+              "No data in database. Using local storage.",
+              "info"
+            );
+          }
+
+          renderAll();
+        } catch (error) {
+          console.error("Database load error:", error);
+          showNotification(
+            "Database connection failed. Using local data.",
+            "error"
+          );
+          renderAll();
+        }
+      }
+
+      async function saveVesselToDatabase(vesselData) {
+        if (!isSupabaseConnected) return null;
+
+        try {
+          const dbData = {
+            name: vesselData.name.trim(),
+            remarks: vesselData.remarks || "",
+            smc_issue: vesselData.smc?.issue || null,
+            smc_expiry: vesselData.smc?.expiry || null,
+            smc_intermediate_due: vesselData.smc?.intermediateDue || null,
+            smc_intermediate_completed:
+              vesselData.smc?.intermediateCompleted || false,
+            isps_issue: vesselData.isps?.issue || null,
+            isps_expiry: vesselData.isps?.expiry || null,
+            isps_intermediate_due: vesselData.isps?.intermediateDue || null,
+            isps_intermediate_completed:
+              vesselData.isps?.intermediateCompleted || false,
+            mlc_issue: vesselData.mlc?.issue || null,
+            mlc_expiry: vesselData.mlc?.expiry || null,
+            mlc_intermediate_due: vesselData.mlc?.intermediateDue || null,
+            mlc_intermediate_completed:
+              vesselData.mlc?.intermediateCompleted || false,
+            updated_at: new Date().toISOString(),
+          };
+
+          let result;
+
+          // Check if vessel already exists by name (case-insensitive)
+          const { data: existingVessel, error: searchError } = await supabase
+            .from(TABLE_NAME)
+            .select("*")
+            .ilike("name", vesselData.name.trim())
+            .limit(1);
+
+          if (searchError) throw searchError;
+
+          if (existingVessel && existingVessel.length > 0) {
+            const existing = existingVessel[0];
+
+            // Check if we're trying to update a different vessel with the same name
+            if (vesselData.db_id && vesselData.db_id !== existing.id) {
+              showNotification(
+                `Vessel '${vesselData.name}' already exists with different ID`,
+                "error"
+              );
+              return null;
+            }
+
+            // Update existing vessel
+            const { data, error } = await supabase
+              .from(TABLE_NAME)
+              .update(dbData)
+              .eq("id", existing.id)
+              .select();
+
+            if (error) throw error;
+            result = data?.[0];
+          } else {
+            // Insert new vessel
+            dbData.created_at = new Date().toISOString();
+
+            const { data, error } = await supabase
+              .from(TABLE_NAME)
+              .insert([dbData])
+              .select();
+
+            if (error) {
+              if (
+                error.message.includes("unique constraint") ||
+                error.code === "23505"
+              ) {
+                showNotification(
+                  `Vessel '${vesselData.name}' already exists`,
+                  "error"
+                );
+                return null;
+              }
+              throw error;
+            }
+            result = data?.[0];
+          }
+
+          return result;
+        } catch (error) {
+          console.error("Database save error:", error);
+
+          if (error.code === "23505") {
+            showNotification(
+              `Vessel '${vesselData.name}' already exists in database`,
+              "error"
+            );
+          } else {
+            showNotification("Failed to save to database", "error");
+          }
+          return null;
+        }
+      }
+
+      async function deleteVesselFromDatabase(vesselName) {
+        if (!isSupabaseConnected) return false;
+
+        try {
+          const { error } = await supabase
+            .from(TABLE_NAME)
+            .delete()
+            .ilike("name", vesselName);
+
+          if (error) throw error;
+          return true;
+        } catch (error) {
+          console.error("Database delete error:", error);
+          showNotification("Failed to delete from database", "error");
+          return false;
+        }
+      }
+
+      async function batchImportToDatabase(vesselsToImport) {
+        if (!isSupabaseConnected) {
+          showNotification("Database not configured", "error");
+          return { success: false };
+        }
+
+        try {
+          showNotification(
+            `Importing ${vesselsToImport.length} vessels to database...`,
+            "info"
+          );
+
+          const results = {
+            added: 0,
+            updated: 0,
+            skipped: 0,
+            errors: [],
+          };
+
+          // Process vessels one by one to handle conflicts
+          for (const vessel of vesselsToImport) {
+            try {
+              // Check if vessel already exists locally
+              const existingLocalIndex = vessels.findIndex(
+                (v) => v.name.toLowerCase() === vessel.name.toLowerCase()
+              );
+
+              if (existingLocalIndex !== -1) {
+                // Update existing vessel with imported data
+                const existingVessel = vessels[existingLocalIndex];
+
+                // Merge data (prefer imported data)
+                const mergedVessel = {
+                  ...existingVessel,
+                  name: vessel.name,
+                  remarks: vessel.remarks || existingVessel.remarks,
+                  smc: { ...existingVessel.smc, ...vessel.smc },
+                  isps: { ...existingVessel.isps, ...vessel.isps },
+                  mlc: { ...existingVessel.mlc, ...vessel.mlc },
+                };
+
+                // Save to database
+                const result = await saveVesselToDatabase(mergedVessel);
+                if (result) {
+                  vessels[existingLocalIndex] = mergedVessel;
+                  results.updated++;
+                } else {
+                  results.skipped++;
+                }
+              } else {
+                // Save new vessel to database
+                const result = await saveVesselToDatabase(vessel);
+                if (result) {
+                  vessels.push(vessel);
+                  results.added++;
+                } else {
+                  results.skipped++;
+                }
+              }
+            } catch (error) {
+              console.error(`Error importing vessel ${vessel.name}:`, error);
+              results.errors.push(vessel.name);
+              results.skipped++;
+            }
+          }
+
+          saveData(); // Save to local storage
+
+          if (results.errors.length === 0) {
+            showNotification(
+              `Import complete: ${results.added} added, ${results.updated} updated, ${results.skipped} skipped`,
+              "success"
+            );
+          } else {
+            showNotification(
+              `Import complete with ${results.errors.length} errors`,
+              "warning"
+            );
+          }
+
+          return { success: true, ...results };
+        } catch (error) {
+          console.error("Batch import error:", error);
+          showNotification("Import failed", "error");
+          return { success: false, errors: [error.message] };
+        }
+      }
+
+      function updateDatabaseStatus(connected) {
+        const statusElement = document.getElementById("dbSyncStatus");
+        const dbStatus = document.getElementById("dbStatus");
+
+        if (connected) {
+          statusElement.textContent = "Database: Online";
+          statusElement.classList.add("text-green-600", "dark:text-green-400");
+          dbStatus.classList.remove("hidden");
+        } else {
+          statusElement.textContent = "Database: Offline";
+          statusElement.classList.remove(
+            "text-green-600",
+            "dark:text-green-400"
+          );
+          dbStatus.classList.add("hidden");
+        }
+      }
+
+      // ============================================================================
+      // HIDDEN SECTION MANAGEMENT - FIXED
+      // ============================================================================
+      function showHiddenSection() {
+        isHiddenSectionVisible = true;
+
+        // Show the import/export navigation button
+        document
+          .getElementById("navImportExport")
+          .classList.remove("hidden-section");
+
+        // Change button icon and text
+        const showButton = document.getElementById("showHiddenSection");
+        showButton.innerHTML = "🔓 Import/Export Visible";
+        showButton.classList.remove("locked");
+        showButton.classList.add("unlocked");
+
+        // If we're already on the import/export view, show it
+        if (currentView === "importExport") {
+          document
+            .getElementById("viewImportExport")
+            .classList.remove("hidden-section");
+        }
+
+        showNotification("Import/Export section is now visible", "success");
+      }
+
+      function checkHiddenSectionPassword() {
+        if (isHiddenSectionVisible) {
+          showHiddenSection();
+          return true;
+        }
+
+        // Show password modal in center
+        const modal = document.getElementById("passwordModal");
+        modal.classList.remove("hidden");
+
+        // Focus on the password input
+        setTimeout(() => {
+          document.getElementById("sectionPassword").focus();
+        }, 100);
+
+        return false;
       }
 
       // ============================================================================
@@ -879,7 +1677,7 @@
                             <input type="date" 
                                    id="${cert}-issue" 
                                    required
-                                   class="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-gray-50 dark:bg-gray-700">
+                                   class="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-gray-50 dark:bg-gray-700 focus:ring-2 focus:ring-maritime-500 focus:border-transparent">
                         </div>
                         <div>
                             <label class="block text-sm font-medium mb-1">
@@ -888,7 +1686,7 @@
                             <input type="date" 
                                    id="${cert}-expiry" 
                                    required
-                                   class="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-gray-50 dark:bg-gray-700">
+                                   class="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-gray-50 dark:bg-gray-700 focus:ring-2 focus:ring-maritime-500 focus:border-transparent">
                         </div>
                         <div>
                             <label class="block text-sm font-medium mb-1">
@@ -896,7 +1694,7 @@
                             </label>
                             <input type="date" 
                                    id="${cert}-intermediateDue" 
-                                   class="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-gray-50 dark:bg-gray-700">
+                                   class="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-gray-50 dark:bg-gray-700 focus:ring-2 focus:ring-maritime-500 focus:border-transparent">
                         </div>
                         <div class="flex items-center">
                             <input type="checkbox" 
@@ -940,35 +1738,18 @@
       }
 
       // ============================================================================
-      // DRAG AND DROP FUNCTIONALITY - FIXED
+      // DRAG AND DROP FUNCTIONALITY - SIMPLIFIED
       // ============================================================================
       function setupDragAndDrop() {
         const dropZone = document.getElementById("dropZone");
         const fileInput = document.getElementById("csvFileInput");
-        let browseFileClicked = false;
 
-        // Click to browse - FIXED: Only open file dialog once
-        document.getElementById("browseFile").addEventListener("click", (e) => {
-          e.stopPropagation(); // Prevent event bubbling
-          if (!browseFileClicked) {
-            browseFileClicked = true;
-            fileInput.click();
-            // Reset after a short delay
-            setTimeout(() => {
-              browseFileClicked = false;
-            }, 100);
-          }
-        });
-
-        // Also allow clicking the drop zone area (but not the button)
+        // Remove all click handlers - only drag & drop
         dropZone.addEventListener("click", (e) => {
-          // Only trigger if the click wasn't on the browse button
-          if (!e.target.closest("#browseFile")) {
-            fileInput.click();
-          }
+          e.stopPropagation();
+          // Do nothing on click - only drag & drop
         });
 
-        // Drag and drop events
         ["dragenter", "dragover", "dragleave", "drop"].forEach((eventName) => {
           dropZone.addEventListener(eventName, preventDefaults, false);
         });
@@ -978,7 +1759,6 @@
           e.stopPropagation();
         }
 
-        // Highlight drop zone
         ["dragenter", "dragover"].forEach((eventName) => {
           dropZone.addEventListener(eventName, highlight, false);
         });
@@ -995,10 +1775,7 @@
           dropZone.classList.remove("drag-over");
         }
 
-        // Handle drop
-        dropZone.addEventListener("drop", handleDrop, false);
-
-        function handleDrop(e) {
+        dropZone.addEventListener("drop", function handleDrop(e) {
           const dt = e.dataTransfer;
           const files = dt.files;
 
@@ -1008,10 +1785,10 @@
               fileInput.files = files;
               handleFileSelect({ target: fileInput });
             } else {
-              alert("Please drop a CSV file");
+              showNotification("Please drop a CSV file only", "error");
             }
           }
-        }
+        });
       }
 
       // ============================================================================
@@ -1078,6 +1855,32 @@
         return date.toLocaleDateString("en-CA");
       }
 
+      function formatDateForOverview(dateStr) {
+        if (!dateStr) return "-";
+        const date = new Date(dateStr);
+        if (isNaN(date.getTime())) return dateStr;
+
+        const day = date.getDate();
+        const monthNames = [
+          "Jan",
+          "Feb",
+          "Mar",
+          "Apr",
+          "May",
+          "Jun",
+          "Jul",
+          "Aug",
+          "Sep",
+          "Oct",
+          "Nov",
+          "Dec",
+        ];
+        const month = monthNames[date.getMonth()];
+        const year = date.getFullYear();
+
+        return `${day}-${month}-${year}`;
+      }
+
       function daysBetween(date1, date2) {
         const d1 = new Date(date1);
         const d2 = new Date(date2);
@@ -1101,7 +1904,7 @@
       }
 
       // ============================================================================
-      // COMPLIANCE LOGIC - FIXED
+      // COMPLIANCE LOGIC
       // ============================================================================
       function getDateStatus(
         dateStr,
@@ -1215,7 +2018,7 @@
       }
 
       // ============================================================================
-      // RENDERING FUNCTIONS - FIXED
+      // RENDERING FUNCTIONS
       // ============================================================================
       function renderAll() {
         updateSummaryCards();
@@ -1310,7 +2113,7 @@
           nameCell.innerHTML = `
                     <div class="font-medium">${escapeHtml(vessel.name)}</div>
                     <div class="text-xs text-gray-500 dark:text-gray-400 mt-1">
-                        ID: ${vessel.id?.slice(-6) || "N/A"}
+                        ${vessel.db_id ? "DB Synced" : "Local Only"}
                     </div>
                 `;
           row.appendChild(nameCell);
@@ -1388,6 +2191,38 @@
             row.appendChild(certCell);
           });
 
+          // Remarks cell
+          // Remarks cell
+
+          // Remarks cell
+          // Remarks cell for management table (multi-line)
+          const remarksCell = document.createElement("td");
+          remarksCell.className = "p-3 align-top text-sm";
+          const remarks = vessel.remarks || "";
+
+          // Create a unique ID for this vessel's remarks
+          const remarksId = `remarks-${vessel.id}`;
+
+          remarksCell.innerHTML = `
+  <div class="remarks-cell-multi" 
+       id="${remarksId}"
+       title="${escapeHtml(remarks)}">
+    ${remarks || "<span class='text-gray-400'>-</span>"}
+  </div>
+`;
+
+          // Add click event listener after the element is added to DOM
+          setTimeout(() => {
+            const remarksDiv = document.getElementById(remarksId);
+            if (remarksDiv) {
+              remarksDiv.addEventListener("click", () =>
+                showRemarksModal(remarks)
+              );
+            }
+          }, 0);
+
+          row.appendChild(remarksCell);
+
           // Actions cell
           const actionsCell = document.createElement("td");
           actionsCell.className = "p-3 align-top rounded-r-lg";
@@ -1409,24 +2244,39 @@
         });
       }
 
-      function renderOverviewTable() {
+      function renderOverviewTable(searchText = "") {
         const tbody = document.getElementById("overviewTableBody");
+        const noResults = document.getElementById("noSearchResults");
 
         // Sort vessels by name
-        const sortedVessels = [...vessels].sort((a, b) =>
+        let filteredVessels = [...vessels].sort((a, b) =>
           a.name.localeCompare(b.name)
         );
 
+        // Apply search filter if provided
+        if (searchText.trim()) {
+          filteredVessels = filteredVessels.filter((vessel) =>
+            vessel.name.toLowerCase().includes(searchText.toLowerCase())
+          );
+        }
+
+        if (filteredVessels.length === 0) {
+          tbody.innerHTML = "";
+          noResults.classList.remove("hidden");
+          return;
+        }
+
+        noResults.classList.add("hidden");
         tbody.innerHTML = "";
 
-        sortedVessels.forEach((vessel) => {
+        filteredVessels.forEach((vessel) => {
           const row = document.createElement("tr");
           row.className = "hover:bg-gray-50 dark:hover:bg-gray-700";
 
           // Vessel name
           const nameCell = document.createElement("td");
           nameCell.className =
-            "p-3 font-medium sticky left-0 bg-white dark:bg-gray-800 border-r border-gray-200 dark:border-gray-700";
+            "p-2 font-medium sticky left-0 bg-white dark:bg-gray-800 border-r border-gray-200 dark:border-gray-700";
           nameCell.textContent = escapeHtml(vessel.name);
           row.appendChild(nameCell);
 
@@ -1462,6 +2312,39 @@
             row.appendChild(expiryCell);
           });
 
+          // Remarks cell for overview
+          // Remarks cell for overview table (single line)
+          const remarksCell = document.createElement("td");
+          remarksCell.className =
+            "p-2 text-sm sticky left-0 bg-white dark:bg-gray-800 border-r border-gray-200 dark:border-gray-700";
+          const remarks = vessel.remarks || "";
+          const overviewRemarksId = `overview-remarks-${vessel.id}`;
+
+          remarksCell.innerHTML = `
+  <div class="remarks-cell-single" 
+       id="${overviewRemarksId}"
+       title="${escapeHtml(remarks)}">
+    ${
+      remarks
+        ? escapeHtml(remarks.substring(0, 20)) +
+          (remarks.length > 20 ? "..." : "")
+        : "<span class='text-gray-400'>-</span>"
+    }
+  </div>
+`;
+
+          // Add click event listener after the element is added to DOM
+          setTimeout(() => {
+            const remarksDiv = document.getElementById(overviewRemarksId);
+            if (remarksDiv) {
+              remarksDiv.addEventListener("click", () =>
+                showRemarksModal(remarks)
+              );
+            }
+          }, 0);
+
+          row.appendChild(remarksCell);
+
           tbody.appendChild(row);
         });
       }
@@ -1473,7 +2356,7 @@
         isIssueDate = false
       ) {
         const cell = document.createElement("td");
-        cell.className = "p-3 text-center text-sm";
+        cell.className = "p-2 text-center text-sm overview-date";
 
         if (!dateStr) {
           cell.textContent = "-";
@@ -1481,7 +2364,7 @@
           return cell;
         }
 
-        const formattedDate = formatDate(dateStr);
+        const formattedDate = formatDateForOverview(dateStr);
         const status = getDateStatus(dateStr, isIntermediate, isCompleted);
 
         // Issue dates are NEVER highlighted
@@ -1542,7 +2425,7 @@
         // Clear canvas
         ctx.clearRect(0, 0, canvas.width, canvas.height);
 
-        // Calculate data - FIXED to include all statuses
+        // Calculate data
         const counts = { valid: 0, coming: 0, expired: 0 };
         vessels.forEach((vessel) => {
           const status = getVesselStatus(vessel);
@@ -1722,22 +2605,99 @@
           .getElementById("donutChart")
           .addEventListener("click", handleChartClick);
 
-        // Import/Export
+        // Show hidden section button - FIXED
+        document
+          .getElementById("showHiddenSection")
+          .addEventListener("click", () => {
+            checkHiddenSectionPassword();
+          });
+
+        // Search functionality
+        document
+          .getElementById("searchVessels")
+          .addEventListener("input", function (e) {
+            searchQuery = e.target.value;
+            renderOverviewTable(searchQuery);
+          });
+
+        // Import/Export functions (no password needed once section is visible)
         document
           .getElementById("csvFileInput")
           .addEventListener("change", handleFileSelect);
+
         document
           .getElementById("exportCSV")
           .addEventListener("click", exportCSV);
+
+        // Changed from exportPDF to exportOverviewPDF
         document
           .getElementById("exportPDF")
-          .addEventListener("click", exportPDF);
-        document
-          .getElementById("exportOverview")
           .addEventListener("click", exportOverviewPDF);
+
         document
           .getElementById("clearAllData")
           .addEventListener("click", clearAllData);
+
+        // Database sync
+        document
+          .getElementById("syncToDatabase")
+          .addEventListener("click", syncAllToDatabase);
+
+        // Refresh button
+        document
+          .getElementById("refreshData")
+          .addEventListener("click", async () => {
+            if (isSupabaseConnected) {
+              await loadFromDatabase();
+            } else {
+              renderAll();
+              showNotification("Data refreshed", "success");
+            }
+          });
+
+        // Password modal - FIXED
+        document
+          .getElementById("submitPassword")
+          .addEventListener("click", () => {
+            const password = document.getElementById("sectionPassword").value;
+            if (password === SECTION_PASSWORD) {
+              showHiddenSection();
+              document.getElementById("passwordModal").classList.add("hidden");
+              document.getElementById("sectionPassword").value = "";
+            } else {
+              showNotification("Incorrect password", "error");
+              document.getElementById("sectionPassword").value = "";
+            }
+          });
+
+        document
+          .getElementById("cancelPassword")
+          .addEventListener("click", () => {
+            document.getElementById("passwordModal").classList.add("hidden");
+            document.getElementById("sectionPassword").value = "";
+          });
+
+        document
+          .getElementById("sectionPassword")
+          .addEventListener("keydown", (e) => {
+            if (e.key === "Enter") {
+              const password = document.getElementById("sectionPassword").value;
+              if (password === SECTION_PASSWORD) {
+                showHiddenSection();
+                document
+                  .getElementById("passwordModal")
+                  .classList.add("hidden");
+                document.getElementById("sectionPassword").value = "";
+              } else {
+                showNotification("Incorrect password", "error");
+                document.getElementById("sectionPassword").value = "";
+              }
+            }
+            if (e.key === "Escape") {
+              document.getElementById("passwordModal").classList.add("hidden");
+              document.getElementById("sectionPassword").value = "";
+            }
+          });
 
         // Import modal
         document
@@ -1783,88 +2743,175 @@
           activeView.classList.remove("hidden");
           currentView = viewName;
 
+          // If it's the hidden import/export view and section is not visible, hide it
+          if (viewName === "importExport" && !isHiddenSectionVisible) {
+            activeView.classList.add("hidden-section");
+          } else if (viewName === "importExport" && isHiddenSectionVisible) {
+            activeView.classList.remove("hidden-section");
+          }
+
           // Refresh view-specific content
           if (viewName === "overview") {
-            renderOverviewTable();
+            renderOverviewTable(searchQuery);
           } else if (viewName === "management") {
             renderManagementTable();
           }
         }
       }
 
-      function handleFormSubmit(event) {
+      async function handleFormSubmit(event) {
         event.preventDefault();
 
-        const vesselName = document.getElementById("vesselName").value.trim();
+        // Show loading state
+        const submitButton = document.getElementById("submitButton");
+        const submitText = document.getElementById("submitText");
+        const submitSpinner = document.getElementById("submitSpinner");
 
-        if (!vesselName) {
-          showNotification("Vessel name is required", "error");
-          return;
-        }
+        submitButton.disabled = true;
+        submitText.textContent = "Saving...";
+        submitSpinner.classList.remove("hidden");
 
-        // Prepare vessel data
-        const vesselData = {
-          id: editId || generateId(),
-          name: vesselName,
-          createdAt: new Date().toISOString(),
-        };
+        try {
+          const vesselName = document.getElementById("vesselName").value.trim();
+          const remarks = document.getElementById("remarks").value.trim();
 
-        CERTS.forEach((cert) => {
-          const issue = normalizeDate(
-            document.getElementById(`${cert}-issue`).value
+          if (!vesselName) {
+            showNotification("Vessel name is required", "error");
+            return;
+          }
+
+          // Check for duplicate vessel name (case-insensitive)
+          const isDuplicate = vessels.some(
+            (v) =>
+              v.id !== editId &&
+              v.name.toLowerCase() === vesselName.toLowerCase()
           );
-          const expiry = normalizeDate(
-            document.getElementById(`${cert}-expiry`).value
-          );
-          let intermediateDue = normalizeDate(
-            document.getElementById(`${cert}-intermediateDue`).value
-          );
-          const intermediateCompleted = document.getElementById(
-            `${cert}-intermediateCompleted`
-          ).checked;
 
-          // Validate required dates
-          if (!issue || !expiry) {
-            showNotification(
-              `${CERT_SHORT[cert]} requires both issue and expiry dates`,
-              "error"
+          if (isDuplicate && !editId) {
+            if (
+              !confirm(
+                `Vessel '${vesselName}' already exists. Update existing vessel instead?`
+              )
+            ) {
+              return;
+            }
+            // Find and edit the existing vessel
+            const existingVessel = vessels.find(
+              (v) => v.name.toLowerCase() === vesselName.toLowerCase()
             );
-            throw new Error("Validation failed");
+            if (existingVessel) {
+              editVessel(existingVessel.id);
+              return;
+            }
           }
 
-          // Auto-calculate intermediate if not provided
-          if (!intermediateDue && issue && expiry) {
-            intermediateDue = calculateMidpoint(issue, expiry);
-          }
-
-          vesselData[cert] = {
-            issue: issue,
-            expiry: expiry,
-            intermediateDue: intermediateDue,
-            intermediateCompleted: intermediateCompleted,
+          // Prepare vessel data
+          const vesselData = {
+            id: editId || vesselName.toLowerCase().replace(/[^a-z0-9]/g, "-"),
+            name: vesselName,
+            remarks: remarks,
+            createdAt: editId
+              ? vessels.find((v) => v.id === editId)?.createdAt
+              : new Date().toISOString(),
           };
-        });
 
-        // Update or add vessel
-        if (editId) {
-          const index = vessels.findIndex((v) => v.id === editId);
-          if (index !== -1) {
-            vessels[index] = vesselData;
+          // Add certification data
+          CERTS.forEach((cert) => {
+            const issue = normalizeDate(
+              document.getElementById(`${cert}-issue`).value
+            );
+            const expiry = normalizeDate(
+              document.getElementById(`${cert}-expiry`).value
+            );
+            let intermediateDue = normalizeDate(
+              document.getElementById(`${cert}-intermediateDue`).value
+            );
+            const intermediateCompleted = document.getElementById(
+              `${cert}-intermediateCompleted`
+            ).checked;
+
+            // Validate required dates
+            if (!issue || !expiry) {
+              showNotification(
+                `${CERT_SHORT[cert]} requires both issue and expiry dates`,
+                "error"
+              );
+              throw new Error("Validation failed");
+            }
+
+            // Auto-calculate intermediate if not provided
+            if (!intermediateDue && issue && expiry) {
+              intermediateDue = calculateMidpoint(issue, expiry);
+            }
+
+            vesselData[cert] = {
+              issue: issue,
+              expiry: expiry,
+              intermediateDue: intermediateDue,
+              intermediateCompleted: intermediateCompleted,
+            };
+          });
+
+          // Save to database if connected
+          if (isSupabaseConnected) {
+            // If editing, preserve database ID
+            if (editId && editDbId) {
+              vesselData.db_id = editDbId;
+            } else if (editId) {
+              // Find existing vessel's db_id
+              const existingVessel = vessels.find((v) => v.id === editId);
+              if (existingVessel?.db_id) {
+                vesselData.db_id = existingVessel.db_id;
+              }
+            }
+
+            const dbResult = await saveVesselToDatabase(vesselData);
+            if (dbResult) {
+              vesselData.db_id = dbResult.id;
+              vesselData.updatedAt = dbResult.updated_at;
+            } else if (!dbResult && isSupabaseConnected) {
+              // Database save failed (likely duplicate)
+              return;
+            }
           }
-        } else {
-          vessels.push(vesselData);
+
+          // Update or add vessel locally
+          if (editId) {
+            const index = vessels.findIndex((v) => v.id === editId);
+            if (index !== -1) {
+              vessels[index] = vesselData;
+              showNotification(`Updated vessel: ${vesselName}`, "success");
+            }
+          } else {
+            // Check again for duplicate before adding (race condition)
+            const existingIndex = vessels.findIndex(
+              (v) => v.name.toLowerCase() === vesselName.toLowerCase()
+            );
+
+            if (existingIndex !== -1) {
+              // Update existing vessel
+              vessels[existingIndex] = vesselData;
+              showNotification(`Updated vessel: ${vesselName}`, "success");
+            } else {
+              // Add new vessel
+              vessels.push(vesselData);
+              showNotification(`Added vessel: ${vesselName}`, "success");
+            }
+          }
+
+          // Save and refresh
+          saveData();
+          clearForm();
+          renderAll();
+        } catch (error) {
+          console.error("Error saving vessel:", error);
+          showNotification("Error saving vessel", "error");
+        } finally {
+          // Reset button state
+          submitButton.disabled = false;
+          submitText.textContent = editId ? "Update Vessel" : "Save Vessel";
+          submitSpinner.classList.add("hidden");
         }
-
-        // Save and refresh
-        saveData();
-        clearForm();
-        renderAll();
-
-        // Show success feedback
-        showNotification(
-          editId ? "Vessel updated successfully" : "Vessel added successfully",
-          "success"
-        );
       }
 
       function editVessel(vesselId) {
@@ -1872,11 +2919,16 @@
         if (!vessel) return;
 
         editId = vesselId;
+        editDbId = vessel.db_id || null;
         document.getElementById(
           "formTitle"
         ).textContent = `✏️ Edit ${vessel.name}`;
         document.getElementById("vesselName").value = vessel.name;
+        document.getElementById("remarks").value = vessel.remarks || "";
         document.getElementById("cancelEdit").classList.remove("hidden");
+
+        // Update submit button text
+        document.getElementById("submitText").textContent = "Update Vessel";
 
         // Fill certification data
         CERTS.forEach((cert) => {
@@ -1906,31 +2958,49 @@
           .scrollIntoView({ behavior: "smooth" });
       }
 
-      function deleteVessel(vesselId) {
+      async function deleteVessel(vesselId) {
+        const vessel = vessels.find((v) => v.id === vesselId);
+        if (!vessel) return;
+
         if (
           !confirm(
-            "Are you sure you want to delete this vessel? This action cannot be undone."
+            `Are you sure you want to delete vessel '${vessel.name}'? This action cannot be undone.`
           )
         ) {
           return;
         }
 
-        const vesselIndex = vessels.findIndex((v) => v.id === vesselId);
-        if (vesselIndex !== -1) {
-          const vesselName = vessels[vesselIndex].name;
-          vessels.splice(vesselIndex, 1);
-          saveData();
-          renderAll();
+        try {
+          // Delete from database if connected
+          if (isSupabaseConnected && vessel.name) {
+            const success = await deleteVesselFromDatabase(vessel.name);
+            if (!success) {
+              showNotification("Failed to delete from database", "error");
+              return;
+            }
+          }
 
-          showNotification(`Deleted vessel: ${vesselName}`, "warning");
+          // Remove from local array
+          const vesselIndex = vessels.findIndex((v) => v.id === vesselId);
+          if (vesselIndex !== -1) {
+            vessels.splice(vesselIndex, 1);
+            saveData();
+            renderAll();
+            showNotification(`Deleted vessel: ${vessel.name}`, "warning");
+          }
+        } catch (error) {
+          console.error("Delete error:", error);
+          showNotification("Error deleting vessel", "error");
         }
       }
 
       function clearForm() {
         document.getElementById("vesselForm").reset();
         editId = null;
+        editDbId = null;
         document.getElementById("formTitle").textContent = "➕ Add New Vessel";
         document.getElementById("cancelEdit").classList.add("hidden");
+        document.getElementById("submitText").textContent = "Save Vessel";
       }
 
       function cancelEdit() {
@@ -1969,7 +3039,7 @@
         document.getElementById("toggleDaysOverview").textContent = buttonText;
 
         if (currentView === "overview") {
-          renderOverviewTable();
+          renderOverviewTable(searchQuery);
         }
       }
 
@@ -2008,7 +3078,7 @@
       }
 
       // ============================================================================
-      // IMPORT/EXPORT FUNCTIONS - FIXED
+      // IMPORT/EXPORT FUNCTIONS
       // ============================================================================
       function handleFileSelect(event) {
         const file = event.target.files[0];
@@ -2025,7 +3095,7 @@
         };
         reader.onerror = function (e) {
           console.error("File reading error:", e);
-          alert("Error reading file. Please try again.");
+          showNotification("Error reading file. Please try again.", "error");
         };
         reader.readAsText(file, "UTF-8");
       }
@@ -2038,6 +3108,7 @@
         const results = document.getElementById("importResults");
         const added = document.getElementById("importAdded");
         const updated = document.getElementById("importUpdated");
+        const skipped = document.getElementById("importSkipped");
         const confirmBtn = document.getElementById("confirmImport");
 
         // Reset modal
@@ -2048,6 +3119,7 @@
         progress.textContent = "0/0";
         progressBar.style.width = "0%";
 
+        // Use setTimeout to prevent blocking the UI
         setTimeout(() => {
           try {
             const lines = csvText.trim().split("\n");
@@ -2068,7 +3140,6 @@
 
             // Process rows
             const newVessels = [];
-            const errors = [];
 
             for (let i = 1; i < lines.length; i++) {
               // Update progress
@@ -2079,26 +3150,27 @@
               const line = lines[i];
               if (!line.trim()) continue;
 
-              // Parse CSV line (handling quoted values with commas)
-              const values = parseCSVLine(line);
+              // Simple CSV parsing (no quotes handling for now)
+              const values = line.split(",").map((v) => v.trim());
               const rowData = {};
 
               headers.forEach((header, index) => {
                 if (index < values.length) {
-                  rowData[header] = values[index].trim();
+                  rowData[header] = values[index];
                 }
               });
 
               // Validate required fields
               if (!rowData.name) {
-                errors.push(`Row ${i + 1}: Missing vessel name`);
+                console.warn(`Row ${i + 1}: Missing vessel name`);
                 continue;
               }
 
               // Create vessel object
               const vessel = {
-                id: generateId(),
-                name: rowData.name,
+                id: rowData.name.toLowerCase().replace(/[^a-z0-9]/g, "-"),
+                name: rowData.name.trim(),
+                remarks: rowData.remarks || rowData.notes || "",
                 createdAt: new Date().toISOString(),
               };
 
@@ -2112,7 +3184,6 @@
                   `${cert}_expiry`,
                   `${cert}_intermediatedue`,
                   `${cert}_intermediate_due`,
-                  `${cert}intermediatedue`,
                 ];
 
                 // Find issue date
@@ -2153,7 +3224,6 @@
                 const completedFields = [
                   `${cert}_intermediatecompleted`,
                   `${cert}_intermediate_completed`,
-                  `${cert}intermediatecompleted`,
                 ];
 
                 for (const field of completedFields) {
@@ -2193,106 +3263,102 @@
             // Show results
             added.textContent = newVessels.length;
             updated.textContent = 0;
+            skipped.textContent = 0;
 
             results.classList.remove("hidden");
             confirmBtn.classList.remove("hidden");
 
             // Store imported data temporarily
             window.tempImportedVessels = newVessels;
-            window.tempImportErrors = errors;
 
-            if (errors.length > 0) {
-              status.textContent = `Completed with ${errors.length} error(s)`;
-              console.warn("Import errors:", errors);
-            } else {
-              status.textContent = "Ready to import";
-            }
+            status.textContent = "Ready to import";
           } catch (error) {
             status.textContent = `Error: ${error.message}`;
             setTimeout(() => {
               modal.classList.add("hidden");
-              alert(`Import failed: ${error.message}`);
+              showNotification(`Import failed: ${error.message}`, "error");
             }, 2000);
           }
         }, 100);
       }
 
-      function parseCSVLine(line) {
-        const values = [];
-        let current = "";
-        let inQuotes = false;
-
-        for (let i = 0; i < line.length; i++) {
-          const char = line[i];
-          const nextChar = line[i + 1];
-
-          if (char === '"' && !inQuotes) {
-            inQuotes = true;
-          } else if (char === '"' && inQuotes && nextChar === '"') {
-            current += '"';
-            i++;
-          } else if (char === '"' && inQuotes) {
-            inQuotes = false;
-          } else if (char === "," && !inQuotes) {
-            values.push(current);
-            current = "";
-          } else {
-            current += char;
-          }
-        }
-
-        values.push(current);
-        return values;
-      }
-
-      function confirmImport() {
+      async function confirmImport() {
         if (!window.tempImportedVessels) return;
 
-        // Merge with existing vessels (update by name)
-        const vesselMap = new Map();
+        const modal = document.getElementById("importModal");
+        const status = document.getElementById("importStatus");
+        const progress = document.getElementById("importProgress");
+        const progressBar = document.getElementById("importProgressBar");
 
-        // Add existing vessels to map
-        vessels.forEach((vessel) => {
-          vesselMap.set(vessel.name.toLowerCase(), vessel);
-        });
+        status.textContent = "Importing vessels...";
+        progress.textContent = "0/0";
+        progressBar.style.width = "0%";
 
-        // Add/update imported vessels
-        let added = 0;
-        let updated = 0;
-
-        window.tempImportedVessels.forEach((importedVessel) => {
-          const key = importedVessel.name.toLowerCase();
-          if (vesselMap.has(key)) {
-            // Update existing vessel - preserve ID
-            const existing = vesselMap.get(key);
-            importedVessel.id = existing.id; // Keep existing ID
-            importedVessel.createdAt = existing.createdAt; // Keep original creation date
-            vesselMap.set(key, importedVessel);
-            updated++;
-          } else {
-            // Add new vessel
-            vesselMap.set(key, importedVessel);
-            added++;
+        // Check admin access for database import
+        if (isSupabaseConnected) {
+          const result = await batchImportToDatabase(
+            window.tempImportedVessels
+          );
+          modal.classList.add("hidden");
+          if (!result.success) {
+            showNotification(
+              `Import failed: ${result.errors.join(", ")}`,
+              "error"
+            );
           }
-        });
+        } else {
+          // Local import only
+          const vesselMap = new Map();
+          let added = 0;
+          let updated = 0;
 
-        // Update vessels array
-        vessels = Array.from(vesselMap.values());
-        saveData();
+          // Add existing vessels to map
+          vessels.forEach((vessel) => {
+            vesselMap.set(vessel.name.toLowerCase(), vessel);
+          });
 
-        // Close modal and refresh
-        document.getElementById("importModal").classList.add("hidden");
+          // Process imported vessels
+          window.tempImportedVessels.forEach((importedVessel, index) => {
+            // Update progress
+            progress.textContent = `${index + 1}/${
+              window.tempImportedVessels.length
+            }`;
+            progressBar.style.width = `${
+              ((index + 1) / window.tempImportedVessels.length) * 100
+            }%`;
+
+            const key = importedVessel.name.toLowerCase();
+            if (vesselMap.has(key)) {
+              // Update existing vessel
+              const existing = vesselMap.get(key);
+              importedVessel.id = existing.id;
+              importedVessel.createdAt = existing.createdAt;
+              importedVessel.db_id = existing.db_id;
+              vesselMap.set(key, importedVessel);
+              updated++;
+            } else {
+              // Add new vessel
+              vesselMap.set(key, importedVessel);
+              added++;
+            }
+          });
+
+          // Update vessels array
+          vessels = Array.from(vesselMap.values());
+          saveData();
+
+          modal.classList.add("hidden");
+          showNotification(
+            `Imported ${added} new vessels, updated ${updated} existing vessels`,
+            "success"
+          );
+        }
+
+        // Refresh
         renderAll();
-
-        // Show success message
-        showNotification(
-          `Imported ${added} new vessels, updated ${updated} existing vessels`,
-          "success"
-        );
 
         // Clear temp data
         delete window.tempImportedVessels;
-        delete window.tempImportErrors;
 
         // Clear file input
         document.getElementById("csvFileInput").value = "";
@@ -2301,7 +3367,6 @@
       function cancelImport() {
         document.getElementById("importModal").classList.add("hidden");
         delete window.tempImportedVessels;
-        delete window.tempImportErrors;
         document.getElementById("csvFileInput").value = "";
       }
 
@@ -2312,7 +3377,7 @@
         }
 
         // Prepare CSV headers
-        const headers = ["name"];
+        const headers = ["name", "remarks"];
         CERTS.forEach((cert) => {
           headers.push(
             `${cert}_issue`,
@@ -2324,7 +3389,7 @@
 
         // Prepare rows
         const rows = vessels.map((vessel) => {
-          const row = [vessel.name];
+          const row = [vessel.name, vessel.remarks || ""];
 
           CERTS.forEach((cert) => {
             const certData = vessel[cert] || {};
@@ -2380,173 +3445,6 @@
         );
       }
 
-      function exportPDF() {
-        if (vessels.length === 0) {
-          alert("No vessels to export");
-          return;
-        }
-
-        const { jsPDF } = window.jspdf;
-        const doc = new jsPDF("landscape");
-        const dateStr = new Date().toLocaleDateString();
-
-        // Title
-        doc.setFontSize(20);
-        doc.text("Vessel Compliance Report", 14, 22);
-        doc.setFontSize(11);
-        doc.text(`Generated: ${dateStr}`, 14, 30);
-
-        // Prepare table data with all required columns
-        const tableData = vessels.map((vessel) => {
-          const row = [vessel.name];
-
-          // Add all certification dates
-          CERTS.forEach((cert) => {
-            const certData = vessel[cert] || {};
-            
-            // Issue date (always normal)
-            row.push(certData.issue ? formatDate(certData.issue) : "N/A");
-            
-            // Intermediate date with status check
-            const intStatus = getDateStatus(
-              certData.intermediateDue,
-              true,
-              certData.intermediateCompleted
-            );
-            const intDate = certData.intermediateDue ? formatDate(certData.intermediateDue) : "N/A";
-            row.push(intDate);
-            
-            // Expiry date with status check
-            const expStatus = getDateStatus(certData.expiry, false, false);
-            const expDate = certData.expiry ? formatDate(certData.expiry) : "N/A";
-            row.push(expDate);
-          });
-
-          return row;
-        });
-
-        // Table headers
-        const headers = [
-          "Vessel Name",
-          "SMC Issue", "SMC Int.", "SMC Expiry",
-          "ISPS Issue", "ISPS Int.", "ISPS Expiry",
-          "MLC Issue", "MLC Int.", "MLC Expiry"
-        ];
-
-        // Generate table with custom cell styling
-        doc.autoTable({
-          head: [headers],
-          body: tableData,
-          startY: 40,
-          theme: "grid",
-          styles: {
-            fontSize: 9,
-            cellPadding: 3,
-            overflow: "linebreak",
-            halign: "center",
-          },
-          headStyles: {
-            fillColor: [59, 130, 246], // Blue header
-            textColor: 255,
-            fontSize: 10,
-            fontStyle: "bold",
-          },
-          columnStyles: {
-            0: { cellWidth: 25, halign: "left" }, // Vessel Name
-            1: { cellWidth: 15 }, // SMC Issue
-            2: { cellWidth: 15 }, // SMC Int
-            3: { cellWidth: 15 }, // SMC Expiry
-            4: { cellWidth: 15 }, // ISPS Issue
-            5: { cellWidth: 15 }, // ISPS Int
-            6: { cellWidth: 15 }, // ISPS Expiry
-            7: { cellWidth: 15 }, // MLC Issue
-            8: { cellWidth: 15 }, // MLC Int
-            9: { cellWidth: 15 }, // MLC Expiry
-          },
-          willDrawCell: function(data) {
-            // Skip header row
-            if (data.section === 'head') return;
-            
-            // Column indices for intermediate and expiry dates
-            const intermediateCols = [2, 5, 8]; // SMC Int, ISPS Int, MLC Int columns
-            const expiryCols = [3, 6, 9]; // SMC Exp, ISPS Exp, MLC Exp columns
-            
-            const vesselIndex = data.row.index;
-            const vessel = vessels[vesselIndex];
-            
-            if (vessel) {
-              // Check if this is an intermediate date column
-              if (intermediateCols.includes(data.column.index)) {
-                const certIndex = Math.floor((data.column.index - 1) / 3);
-                const cert = CERTS[certIndex];
-                const certData = vessel[cert] || {};
-                
-                if (certData.intermediateDue) {
-                  const status = getDateStatus(
-                    certData.intermediateDue,
-                    true,
-                    certData.intermediateCompleted
-                  );
-                  
-                  // Apply color coding
-                  if (status.status === "expired") {
-                    doc.setFillColor(255, 220, 220); // Light red
-                    doc.rect(data.cell.x, data.cell.y, data.cell.width, data.cell.height, 'F');
-                    doc.setTextColor(255, 0, 0); // Red text
-                  } else if (status.status === "coming") {
-                    doc.setFillColor(255, 248, 220); // Light yellow
-                    doc.rect(data.cell.x, data.cell.y, data.cell.width, data.cell.height, 'F');
-                    doc.setTextColor(255, 165, 0); // Orange text
-                  } else if (certData.intermediateCompleted) {
-                    doc.setFillColor(220, 255, 220); // Light green
-                    doc.rect(data.cell.x, data.cell.y, data.cell.width, data.cell.height, 'F');
-                    doc.setTextColor(0, 128, 0); // Green text
-                  }
-                }
-              }
-              
-              // Check if this is an expiry date column
-              else if (expiryCols.includes(data.column.index)) {
-                const certIndex = Math.floor((data.column.index - 1) / 3);
-                const cert = CERTS[certIndex];
-                const certData = vessel[cert] || {};
-                
-                if (certData.expiry) {
-                  const status = getDateStatus(certData.expiry, false, false);
-                  
-                  // Apply color coding
-                  if (status.status === "expired") {
-                    doc.setFillColor(255, 220, 220); // Light red
-                    doc.rect(data.cell.x, data.cell.y, data.cell.width, data.cell.height, 'F');
-                    doc.setTextColor(255, 0, 0); // Red text
-                  } else if (status.status === "coming") {
-                    doc.setFillColor(255, 248, 220); // Light yellow
-                    doc.rect(data.cell.x, data.cell.y, data.cell.width, data.cell.height, 'F');
-                    doc.setTextColor(255, 165, 0); // Orange text
-                  }
-                }
-              }
-            }
-          },
-          didDrawCell: function(data) {
-            // Reset text color after drawing each cell
-            doc.setTextColor(0, 0, 0);
-          },
-          alternateRowStyles: {
-            fillColor: [240, 240, 240],
-          },
-        });
-
-        // Save PDF
-        doc.save(
-          `vessel_compliance_report_${
-            new Date().toISOString().split("T")[0]
-          }.pdf`
-        );
-
-        showNotification("PDF report generated successfully", "success");
-      }
-
       function exportOverviewPDF() {
         if (vessels.length === 0) {
           alert("No vessels to export");
@@ -2564,20 +3462,57 @@
         doc.text(`Generated: ${dateStr}`, 14, 30);
         doc.text(`Total Vessels: ${vessels.length}`, 14, 38);
 
+        // Calculate summary statistics
+        const counts = { valid: 0, coming: 0, expired: 0 };
+        vessels.forEach((vessel) => {
+          const status = getVesselStatus(vessel);
+          if (status.status in counts) {
+            counts[status.status]++;
+          }
+        });
+
+        // Add summary section
+        doc.setFontSize(12);
+        doc.text("Summary:", 14, 50);
+        doc.setFontSize(10);
+        doc.setTextColor(0, 128, 0);
+        doc.text(`✓ Fully Compliant: ${counts.valid}`, 14, 58);
+        doc.setTextColor(255, 165, 0);
+        doc.text(`⚠ Coming Due (≤90 days): ${counts.coming}`, 14, 65);
+        doc.setTextColor(255, 0, 0);
+        doc.text(`✗ Expired/Overdue: ${counts.expired}`, 14, 72);
+        doc.setTextColor(0, 0, 0);
+
         // Prepare detailed table data
         const tableData = vessels.map((vessel) => {
           const row = [vessel.name];
 
           CERTS.forEach((cert) => {
             const certData = vessel[cert] || {};
+
+            // Issue date (never colored)
             row.push(
-              certData.issue ? formatDate(certData.issue) : "N/A",
-              certData.intermediateDue
-                ? formatDate(certData.intermediateDue)
-                : "N/A",
-              certData.expiry ? formatDate(certData.expiry) : "N/A"
+              certData.issue ? formatDateForOverview(certData.issue) : "N/A"
+            );
+
+            // Intermediate date
+            const intDate = certData.intermediateDue
+              ? formatDateForOverview(certData.intermediateDue)
+              : "N/A";
+            const intStatus = certData.intermediateCompleted ? "✓ " : "";
+            row.push(`${intStatus}${intDate}`);
+
+            // Expiry date
+            row.push(
+              certData.expiry ? formatDateForOverview(certData.expiry) : "N/A"
             );
           });
+
+          // Add remarks
+          const remarks = vessel.remarks || "";
+          row.push(
+            remarks.substring(0, 20) + (remarks.length > 20 ? "..." : "")
+          );
 
           return row;
         });
@@ -2586,21 +3521,22 @@
         const headers = [
           "Vessel Name",
           "SMC Issue",
-          "SMC Int.",
-          "SMC Expiry",
+          "SMC Int",
+          "SMC Exp",
           "ISPS Issue",
-          "ISPS Int.",
-          "ISPS Expiry",
+          "ISPS Int",
+          "ISPS Exp",
           "MLC Issue",
-          "MLC Int.",
-          "MLC Expiry",
+          "MLC Int",
+          "MLC Exp",
+          "Remarks",
         ];
 
         // Generate table with color coding
         doc.autoTable({
           head: [headers],
           body: tableData,
-          startY: 45,
+          startY: 80,
           theme: "grid",
           styles: {
             fontSize: 8,
@@ -2618,80 +3554,109 @@
             0: { cellWidth: 25, halign: "left" }, // Vessel Name
             1: { cellWidth: 15 }, // SMC Issue
             2: { cellWidth: 15 }, // SMC Int
-            3: { cellWidth: 15 }, // SMC Expiry
+            3: { cellWidth: 15 }, // SMC Exp
             4: { cellWidth: 15 }, // ISPS Issue
             5: { cellWidth: 15 }, // ISPS Int
-            6: { cellWidth: 15 }, // ISPS Expiry
+            6: { cellWidth: 15 }, // ISPS Exp
             7: { cellWidth: 15 }, // MLC Issue
             8: { cellWidth: 15 }, // MLC Int
-            9: { cellWidth: 15 }, // MLC Expiry
+            9: { cellWidth: 15 }, // MLC Exp
+            10: { cellWidth: 25, halign: "left" }, // Remarks
           },
-          willDrawCell: function(data) {
+          willDrawCell: function (data) {
             // Skip header row
-            if (data.section === 'head') return;
-            
-            // Column indices for intermediate and expiry dates
-            const intermediateCols = [2, 5, 8]; // SMC Int, ISPS Int, MLC Int columns
-            const expiryCols = [3, 6, 9]; // SMC Exp, ISPS Exp, MLC Exp columns
-            
+            if (data.section === "head") return;
+
             const vesselIndex = data.row.index;
             const vessel = vessels[vesselIndex];
-            
+
             if (vessel) {
-              // Check if this is an intermediate date column
+              // Check if this is an intermediate date column (columns 2, 5, 8)
+              const intermediateCols = [2, 5, 8];
               if (intermediateCols.includes(data.column.index)) {
                 const certIndex = Math.floor((data.column.index - 1) / 3);
                 const cert = CERTS[certIndex];
                 const certData = vessel[cert] || {};
-                
+
                 if (certData.intermediateDue) {
                   const status = getDateStatus(
                     certData.intermediateDue,
                     true,
                     certData.intermediateCompleted
                   );
-                  
+
                   // Apply color coding
-                  if (status.status === "expired") {
+                  if (certData.intermediateCompleted) {
+                    doc.setFillColor(220, 255, 220); // Light green
+                    doc.rect(
+                      data.cell.x,
+                      data.cell.y,
+                      data.cell.width,
+                      data.cell.height,
+                      "F"
+                    );
+                    doc.setTextColor(0, 128, 0);
+                  } else if (status.status === "expired") {
                     doc.setFillColor(255, 220, 220); // Light red
-                    doc.rect(data.cell.x, data.cell.y, data.cell.width, data.cell.height, 'F');
-                    doc.setTextColor(255, 0, 0); // Red text
+                    doc.rect(
+                      data.cell.x,
+                      data.cell.y,
+                      data.cell.width,
+                      data.cell.height,
+                      "F"
+                    );
+                    doc.setTextColor(255, 0, 0);
                   } else if (status.status === "coming") {
                     doc.setFillColor(255, 248, 220); // Light yellow
-                    doc.rect(data.cell.x, data.cell.y, data.cell.width, data.cell.height, 'F');
-                    doc.setTextColor(255, 165, 0); // Orange text
-                  } else if (certData.intermediateCompleted) {
-                    doc.setFillColor(220, 255, 220); // Light green
-                    doc.rect(data.cell.x, data.cell.y, data.cell.width, data.cell.height, 'F');
-                    doc.setTextColor(0, 128, 0); // Green text
+                    doc.rect(
+                      data.cell.x,
+                      data.cell.y,
+                      data.cell.width,
+                      data.cell.height,
+                      "F"
+                    );
+                    doc.setTextColor(255, 165, 0);
                   }
                 }
               }
-              
-              // Check if this is an expiry date column
-              else if (expiryCols.includes(data.column.index)) {
+
+              // Check if this is an expiry date column (columns 3, 6, 9)
+              const expiryCols = [3, 6, 9];
+              if (expiryCols.includes(data.column.index)) {
                 const certIndex = Math.floor((data.column.index - 1) / 3);
                 const cert = CERTS[certIndex];
                 const certData = vessel[cert] || {};
-                
+
                 if (certData.expiry) {
                   const status = getDateStatus(certData.expiry, false, false);
-                  
+
                   // Apply color coding
                   if (status.status === "expired") {
                     doc.setFillColor(255, 220, 220); // Light red
-                    doc.rect(data.cell.x, data.cell.y, data.cell.width, data.cell.height, 'F');
-                    doc.setTextColor(255, 0, 0); // Red text
+                    doc.rect(
+                      data.cell.x,
+                      data.cell.y,
+                      data.cell.width,
+                      data.cell.height,
+                      "F"
+                    );
+                    doc.setTextColor(255, 0, 0);
                   } else if (status.status === "coming") {
                     doc.setFillColor(255, 248, 220); // Light yellow
-                    doc.rect(data.cell.x, data.cell.y, data.cell.width, data.cell.height, 'F');
-                    doc.setTextColor(255, 165, 0); // Orange text
+                    doc.rect(
+                      data.cell.x,
+                      data.cell.y,
+                      data.cell.width,
+                      data.cell.height,
+                      "F"
+                    );
+                    doc.setTextColor(255, 165, 0);
                   }
                 }
               }
             }
           },
-          didDrawCell: function(data) {
+          didDrawCell: function (data) {
             // Reset text color after drawing each cell
             doc.setTextColor(0, 0, 0);
           },
@@ -2705,7 +3670,59 @@
           `compliance_overview_${new Date().toISOString().split("T")[0]}.pdf`
         );
 
-        showNotification("Overview PDF generated successfully", "success");
+        showNotification(
+          "Compliance overview PDF generated successfully",
+          "success"
+        );
+      }
+
+      async function syncAllToDatabase() {
+        if (!isSupabaseConnected) {
+          showNotification("Database not configured", "error");
+          return;
+        }
+
+        try {
+          showNotification("Syncing to database...", "info");
+
+          let successCount = 0;
+          let failCount = 0;
+
+          for (const vessel of vessels) {
+            try {
+              const result = await saveVesselToDatabase(vessel);
+              if (result) {
+                // Update local vessel with database ID if new
+                if (!vessel.db_id) {
+                  vessel.db_id = result.id;
+                }
+                successCount++;
+              } else {
+                failCount++;
+              }
+            } catch (error) {
+              console.error(`Failed to sync vessel ${vessel.name}:`, error);
+              failCount++;
+            }
+          }
+
+          saveData(); // Save updated local data
+
+          if (failCount === 0) {
+            showNotification(
+              `Successfully synced ${successCount} vessels to database`,
+              "success"
+            );
+          } else {
+            showNotification(
+              `Synced ${successCount} vessels, failed: ${failCount}`,
+              "warning"
+            );
+          }
+        } catch (error) {
+          console.error("Sync error:", error);
+          showNotification("Sync failed", "error");
+        }
       }
 
       function clearAllData() {
@@ -2722,6 +3739,15 @@
           return;
         }
 
+        // Optionally delete from database
+        if (isSupabaseConnected && confirm("Also delete from database?")) {
+          vessels.forEach(async (vessel) => {
+            if (vessel.db_id) {
+              await deleteVesselFromDatabase(vessel.name);
+            }
+          });
+        }
+
         vessels = [];
         saveData();
         clearForm();
@@ -2734,12 +3760,6 @@
       // ============================================================================
       // UTILITY FUNCTIONS
       // ============================================================================
-      function generateId() {
-        return (
-          Date.now().toString(36) + Math.random().toString(36).substr(2, 5)
-        );
-      }
-
       function escapeHtml(text) {
         const div = document.createElement("div");
         div.textContent = text;
@@ -2767,13 +3787,11 @@
       }
 
       function showNotification(message, type = "info") {
-        // Remove existing notification
-        const existing = document.querySelector(".notification");
-        if (existing) existing.remove();
+        const container = document.getElementById("notificationContainer");
 
-        // Create notification
+        // Create notification element
         const notification = document.createElement("div");
-        notification.className = `notification fixed top-4 right-4 px-6 py-3 rounded-lg shadow-lg smooth-transition z-50 transform translate-x-full opacity-0 ${
+        notification.className = `px-6 py-3 rounded-lg shadow-lg smooth-transition transform translate-x-full opacity-0 ${
           type === "success"
             ? "bg-green-500 text-white"
             : type === "warning"
@@ -2784,7 +3802,8 @@
         }`;
         notification.textContent = message;
 
-        document.body.appendChild(notification);
+        // Add to container
+        container.appendChild(notification);
 
         // Animate in
         setTimeout(() => {
@@ -2804,9 +3823,204 @@
         }, 3000);
       }
 
+      function escapeForAttribute(text) {
+        if (!text) return "''";
+
+        // Escape quotes and special characters
+        const escaped = text
+          .replace(/\\/g, "\\\\") // Escape backslashes
+          .replace(/'/g, "\\'") // Escape single quotes
+          .replace(/"/g, '\\"') // Escape double quotes
+          .replace(/\n/g, "\\n") // Escape newlines
+          .replace(/\r/g, "\\r") // Escape carriage returns
+          .replace(/\t/g, "\\t"); // Escape tabs
+
+        return `'${escaped}'`;
+      }
+
       // Make functions available globally for onclick handlers
       window.editVessel = editVessel;
       window.deleteVessel = deleteVessel;
+      window.showRemarksModal = showRemarksModal;
+      window.escapeForAttribute = escapeForAttribute;
+      // ============================================================================
+      // REMARKS MODAL FUNCTIONS
+      // ============================================================================
+      function setupRemarksModal() {
+        const modal = document.getElementById("remarksModal");
+        const closeBtn = document.getElementById("closeRemarksModal");
+        const closeBtnBottom = document.getElementById(
+          "closeRemarksModalBottom"
+        );
+        const copyBtn = document.getElementById("copyRemarks");
+        const remarksContent = document.getElementById("remarksContent");
+        const charCount = document.getElementById("remarksCharCount");
+
+        // Close modal when clicking X or Close button
+        closeBtn.addEventListener("click", () => {
+          modal.classList.add("hidden");
+        });
+
+        closeBtnBottom.addEventListener("click", () => {
+          modal.classList.add("hidden");
+        });
+
+        // Close modal when clicking outside
+        modal.addEventListener("click", (e) => {
+          if (e.target === modal) {
+            modal.classList.add("hidden");
+          }
+        });
+
+        // Close with Escape key
+        document.addEventListener("keydown", (e) => {
+          if (e.key === "Escape" && !modal.classList.contains("hidden")) {
+            modal.classList.add("hidden");
+          }
+        });
+
+        // Copy remarks to clipboard
+        copyBtn.addEventListener("click", async () => {
+          try {
+            const text = remarksContent.textContent;
+            await navigator.clipboard.writeText(text);
+
+            // Show feedback
+            const originalText = copyBtn.textContent;
+            copyBtn.textContent = "✓ Copied!";
+            copyBtn.classList.add("bg-green-600", "hover:bg-green-700");
+            copyBtn.classList.remove(
+              "bg-maritime-600",
+              "hover:bg-maritime-700"
+            );
+
+            setTimeout(() => {
+              copyBtn.textContent = originalText;
+              copyBtn.classList.remove("bg-green-600", "hover:bg-green-700");
+              copyBtn.classList.add("bg-maritime-600", "hover:bg-maritime-700");
+            }, 2000);
+
+            showNotification("Remarks copied to clipboard", "success");
+          } catch (error) {
+            console.error("Failed to copy:", error);
+            showNotification("Failed to copy remarks", "error");
+          }
+        });
+
+        // Update character count when modal opens
+        const updateCharCount = () => {
+          const text = remarksContent.textContent;
+          const charCountValue = text.length;
+          charCount.textContent = `${charCountValue} character${
+            charCountValue !== 1 ? "s" : ""
+          }`;
+
+          // Style based on length
+          if (charCountValue > 1000) {
+            charCount.classList.add("text-red-500");
+            charCount.classList.remove("text-gray-500");
+          } else if (charCountValue > 500) {
+            charCount.classList.add("text-amber-500");
+            charCount.classList.remove("text-gray-500");
+          } else {
+            charCount.classList.remove("text-red-500", "text-amber-500");
+            charCount.classList.add("text-gray-500");
+          }
+        };
+
+        // Observe changes to remarks content
+        const observer = new MutationObserver(updateCharCount);
+        observer.observe(remarksContent, {
+          childList: true,
+          characterData: true,
+          subtree: true,
+        });
+      }
+
+      function showRemarksModal(remarks) {
+        const modal = document.getElementById("remarksModal");
+        const remarksContent = document.getElementById("remarksContent");
+        const charCount = document.getElementById("remarksCharCount");
+
+        // Set the content
+        remarksContent.textContent = remarks || "No remarks available";
+
+        // Update character count
+        const charCountValue = remarks.length;
+        charCount.textContent = `${charCountValue} character${
+          charCountValue !== 1 ? "s" : ""
+        }`;
+
+        // Style based on length
+        charCount.className = "text-sm ";
+        if (charCountValue > 1000) {
+          charCount.classList.add("text-red-500", "dark:text-red-400");
+        } else if (charCountValue > 500) {
+          charCount.classList.add("text-amber-500", "dark:text-amber-400");
+        } else {
+          charCount.classList.add("text-gray-500", "dark:text-gray-400");
+        }
+
+        // Show modal
+        modal.classList.remove("hidden");
+
+        // Focus for accessibility
+        setTimeout(() => {
+          document.getElementById("closeRemarksModal").focus();
+        }, 100);
+      }
     </script>
+    <!-- Remarks Modal -->
+    <div
+      id="remarksModal"
+      class="fixed inset-0 z-50 hidden items-center justify-center p-4 modal-backdrop"
+    >
+      <div class="relative max-w-2xl w-full mx-auto">
+        <div
+          class="bg-white dark:bg-gray-800 rounded-xl shadow-2xl max-h-[80vh] flex flex-col"
+        >
+          <div
+            class="flex items-center justify-between p-6 border-b border-gray-200 dark:border-gray-700"
+          >
+            <h3 class="text-lg font-semibold">Remarks</h3>
+            <button
+              id="closeRemarksModal"
+              class="text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-300 text-xl"
+            >
+              ✕
+            </button>
+          </div>
+          <div class="p-6 overflow-y-auto flex-grow">
+            <div
+              id="remarksContent"
+              class="text-gray-700 dark:text-gray-300 whitespace-pre-wrap"
+            ></div>
+          </div>
+          <div
+            class="p-6 border-t border-gray-200 dark:border-gray-700 flex justify-between items-center"
+          >
+            <span
+              class="text-sm text-gray-500 dark:text-gray-400"
+              id="remarksCharCount"
+              >0 characters</span
+            >
+            <div class="flex gap-2">
+              <button
+                id="copyRemarks"
+                class="px-4 py-2 bg-maritime-600 text-white rounded-lg hover:bg-maritime-700 smooth-transition text-sm"
+              >
+                📋 Copy
+              </button>
+              <button
+                id="closeRemarksModalBottom"
+                class="px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-700 smooth-transition text-sm"
+              >
+                Close
+              </button>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
   </body>
 </html>
