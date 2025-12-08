@@ -475,6 +475,7 @@
               </div>
 
               <!-- Show Hidden Section Button -->
+
               <!-- In the header section, update the Show Hidden Section Button -->
               <button
                 id="showHiddenSection"
@@ -972,7 +973,23 @@
                     </div>
                     <div class="text-2xl">🖨️</div>
                   </button>
-
+                  <!-- Add to the Export Section in viewImportExport -->
+                  <!-- Change the button to show preview first -->
+                  <button
+                    id="sendAlerts"
+                    class="w-full p-6 bg-yellow-50 dark:bg-yellow-900/20 border border-yellow-200 dark:border-yellow-800 rounded-lg hover:bg-yellow-100 dark:hover:bg-yellow-900/30 smooth-transition flex items-center justify-between"
+                    onclick="showAlertPreview()"
+                  >
+                    <div class="text-left">
+                      <div class="text-2xl mb-2">📧</div>
+                      <h4 class="font-medium">Send Email Alerts</h4>
+                      <p class="text-sm text-gray-600 dark:text-gray-400">
+                        Preview and send alerts for expired/coming due
+                        certificates
+                      </p>
+                    </div>
+                    <div class="text-2xl">✉️</div>
+                  </button>
                   <div
                     class="border-t border-gray-200 dark:border-gray-700 pt-4"
                   >
@@ -4015,6 +4032,452 @@
         setTimeout(() => {
           document.getElementById("closeRemarksModal").focus();
         }, 100);
+      }
+      // ============================================================================
+      // EMAIL ALERT FUNCTIONS - IMPROVED VERSION
+      // ============================================================================
+      function sendEmailAlerts() {
+        // Get vessels that need attention and categorize by certificate
+        let expiredVessels = [];
+        let comingDueVessels = [];
+
+        vessels.forEach((vessel) => {
+          const vesselStatus = getVesselStatus(vessel);
+
+          if (
+            vesselStatus.status === "expired" ||
+            vesselStatus.status === "coming"
+          ) {
+            // Check each certificate individually
+            const expiredCerts = [];
+            const comingDueCerts = [];
+
+            CERTS.forEach((cert) => {
+              const certData = vessel[cert];
+              if (certData) {
+                // Check expiry
+                const expiryStatus = getDateStatus(
+                  certData.expiry,
+                  false,
+                  false
+                );
+
+                if (expiryStatus.status === "expired") {
+                  expiredCerts.push({
+                    cert: CERT_SHORT[cert],
+                    expiryDate: formatDate(certData.expiry),
+                    daysOverdue: Math.abs(expiryStatus.daysUntil),
+                    isIntermediate: false,
+                  });
+                } else if (expiryStatus.status === "coming") {
+                  comingDueCerts.push({
+                    cert: CERT_SHORT[cert],
+                    expiryDate: formatDate(certData.expiry),
+                    daysRemaining: expiryStatus.daysUntil,
+                    isIntermediate: false,
+                  });
+                }
+
+                // Check intermediate (only if not completed)
+                if (
+                  certData.intermediateDue &&
+                  !certData.intermediateCompleted
+                ) {
+                  const intermediateStatus = getDateStatus(
+                    certData.intermediateDue,
+                    true,
+                    false
+                  );
+
+                  if (intermediateStatus.status === "expired") {
+                    expiredCerts.push({
+                      cert: `${CERT_SHORT[cert]} Intermediate`,
+                      expiryDate: formatDate(certData.intermediateDue),
+                      daysOverdue: Math.abs(intermediateStatus.daysUntil),
+                      isIntermediate: true,
+                    });
+                  } else if (intermediateStatus.status === "coming") {
+                    comingDueCerts.push({
+                      cert: `${CERT_SHORT[cert]} Intermediate`,
+                      expiryDate: formatDate(certData.intermediateDue),
+                      daysRemaining: intermediateStatus.daysUntil,
+                      isIntermediate: true,
+                    });
+                  }
+                }
+              }
+            });
+
+            if (expiredCerts.length > 0) {
+              expiredVessels.push({
+                name: vessel.name,
+                certs: expiredCerts,
+              });
+            }
+
+            if (comingDueCerts.length > 0) {
+              comingDueVessels.push({
+                name: vessel.name,
+                certs: comingDueCerts,
+              });
+            }
+          }
+        });
+
+        if (expiredVessels.length === 0 && comingDueVessels.length === 0) {
+          showNotification(
+            "No alerts to send - all vessels are compliant!",
+            "info"
+          );
+          return;
+        }
+
+        // Create detailed email content
+        const subject = `Vessel External Audit Alert - ${new Date().toLocaleDateString()}`;
+
+        let body = `========================================\n`;
+        body += `VESSEL EXTERNAL AUDIT ALERT REPORT\n`;
+        body += `========================================\n\n`;
+
+        body += `Report Date: ${new Date().toLocaleDateString()}\n`;
+        body += `Total Vessels: ${vessels.length}\n`;
+        body += `Expired/Overdue: ${expiredVessels.length} vessel(s)\n`;
+        body += `Coming Due (≤183 days): ${comingDueVessels.length} vessel(s)\n`;
+        body += `\n========================================\n\n`;
+
+        if (expiredVessels.length > 0) {
+          body += `**** EXPIRED / OVERDUE CERTIFICATES ****\n\n`;
+
+          expiredVessels.forEach((vessel, index) => {
+            body += `${index + 1}. ${vessel.name}\n`;
+            body += `   ${"━".repeat(40)}\n`;
+
+            vessel.certs.forEach((cert) => {
+              if (cert.isIntermediate) {
+                body += `   • ${cert.cert}: OVERDUE since ${cert.expiryDate} (${cert.daysOverdue} days overdue)\n`;
+              } else {
+                body += `   • ${cert.cert}: EXPIRED on ${cert.expiryDate} (${cert.daysOverdue} days overdue)\n`;
+              }
+            });
+
+            body += `\n`;
+          });
+
+          body += `\n`;
+        }
+
+        if (comingDueVessels.length > 0) {
+          body += `****  CERTIFICATES COMING DUE (within 183 days)  ****\n\n`;
+
+          // Sort by days remaining (closest first)
+          comingDueVessels.sort((a, b) => {
+            const minDaysA = Math.min(...a.certs.map((c) => c.daysRemaining));
+            const minDaysB = Math.min(...b.certs.map((c) => c.daysRemaining));
+            return minDaysA - minDaysB;
+          });
+
+          comingDueVessels.forEach((vessel, index) => {
+            body += `${index + 1}. ${vessel.name}\n`;
+            body += `   ${"━".repeat(40)}\n`;
+
+            // Sort certs by days remaining
+            vessel.certs.sort((a, b) => a.daysRemaining - b.daysRemaining);
+
+            vessel.certs.forEach((cert) => {
+              const urgency =
+                cert.daysRemaining <= 30
+                  ? "❗ "
+                  : cert.daysRemaining <= 90
+                  ? "⚠️ "
+                  : "";
+              if (cert.isIntermediate) {
+                body += `   • ${urgency}${cert.cert}: Due on ${cert.expiryDate} (${cert.daysRemaining} days remaining)\n`;
+              } else {
+                body += `   • ${urgency}${cert.cert}: Expires on ${cert.expiryDate} (${cert.daysRemaining} days remaining)\n`;
+              }
+            });
+
+            body += `\n`;
+          });
+        }
+
+        // Add summary table at the end
+        body += `\nQUICK SUMMARY\n`;
+        body += `════════════════════════════════════════\n`;
+
+        if (expiredVessels.length > 0) {
+          body += `Expired Vessels:\n`;
+          expiredVessels.forEach((vessel) => {
+            const certList = vessel.certs.map((c) => c.cert).join(", ");
+            body += `- ${vessel.name}: ${certList}\n`;
+          });
+        }
+
+        if (comingDueVessels.length > 0) {
+          body += `\nComing Due Vessels:\n`;
+          comingDueVessels.forEach((vessel) => {
+            const certList = vessel.certs
+              .map((c) => `${c.cert} (${c.daysRemaining}d)`)
+              .join(", ");
+            body += `- ${vessel.name}: ${certList}\n`;
+          });
+        }
+
+        body += `\n========================================\n`;
+        body += `ACTION REQUIRED:\n`;
+        body += `1. Review all expired certificates immediately\n`;
+        body += `2. Schedule renewals for coming due certificates\n`;
+        body += `3. Update tracker after actions are taken\n`;
+        body += `========================================\n\n`;
+
+        body += `This is an automated alert from the Vessel External Audit Tracker.\n`;
+        body += `Generated on ${new Date().toLocaleString()}\n`;
+
+        // Create mailto link with CC option
+        const emailBody = encodeURIComponent(body);
+        const emailSubject = encodeURIComponent(subject);
+
+        // You can add CC emails here if needed
+        const ccEmails = ""; // Example: 'manager@company.com,supervisor@company.com'
+        const ccParam = ccEmails ? `&cc=${ccEmails}` : "";
+
+        const mailtoLink = `mailto:?subject=${emailSubject}&body=${emailBody}${ccParam}`;
+
+        // Open email client
+        window.open(mailtoLink, "_blank");
+
+        // Show detailed notification
+        const totalAlerts =
+          expiredVessels.reduce((sum, v) => sum + v.certs.length, 0) +
+          comingDueVessels.reduce((sum, v) => sum + v.certs.length, 0);
+
+        showNotification(
+          `Email prepared with ${expiredVessels.length} expired and ${comingDueVessels.length} coming due vessels (${totalAlerts} certificates)`,
+          "success"
+        );
+
+        // Also log to console for debugging
+        console.log("Alert Summary:", {
+          expiredVessels: expiredVessels.map((v) => ({
+            vessel: v.name,
+            certs: v.certs.map(
+              (c) => `${c.cert}: ${c.daysOverdue} days overdue`
+            ),
+          })),
+          comingDueVessels: comingDueVessels.map((v) => ({
+            vessel: v.name,
+            certs: v.certs.map(
+              (c) => `${c.cert}: ${c.daysRemaining} days remaining`
+            ),
+          })),
+        });
+      }
+      function showAlertPreview() {
+        // Get alerts data using the same logic as sendEmailAlerts
+        const alertsData = getAlertDetails();
+
+        if (
+          alertsData.expiredVessels.length === 0 &&
+          alertsData.comingDueVessels.length === 0
+        ) {
+          showNotification(
+            "No alerts to send - all vessels are compliant!",
+            "info"
+          );
+          return;
+        }
+
+        // Create a preview modal
+        const modal = document.createElement("div");
+        modal.className =
+          "fixed inset-0 z-50 flex items-center justify-center p-4 modal-backdrop";
+        modal.innerHTML = `
+    <div class="bg-white dark:bg-gray-800 rounded-xl shadow-2xl max-w-4xl w-full max-h-[80vh] overflow-hidden flex flex-col">
+      <div class="flex items-center justify-between p-6 border-b border-gray-200 dark:border-gray-700">
+        <h3 class="text-lg font-semibold">📧 Email Alert Preview</h3>
+        <button onclick="this.closest('.modal-backdrop').remove()" class="text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-300 text-xl">
+          ✕
+        </button>
+      </div>
+      
+      <div class="p-6 overflow-y-auto flex-grow">
+        <div class="mb-6">
+          <h4 class="font-semibold text-lg mb-2">📋 Alert Summary</h4>
+          <div class="grid grid-cols-2 gap-4">
+            <div class="bg-red-50 dark:bg-red-900/20 rounded-lg p-4">
+              <div class="text-red-700 dark:text-red-300 font-bold text-xl mb-1">
+                ❌ ${alertsData.expiredVessels.length}
+              </div>
+              <div class="text-sm">Expired Vessels</div>
+            </div>
+            <div class="bg-amber-50 dark:bg-amber-900/20 rounded-lg p-4">
+              <div class="text-amber-700 dark:text-amber-300 font-bold text-xl mb-1">
+                ⚠️ ${alertsData.comingDueVessels.length}
+              </div>
+              <div class="text-sm">Coming Due Vessels</div>
+            </div>
+          </div>
+        </div>
+        
+        <div class="space-y-6">
+          ${
+            alertsData.expiredVessels.length > 0
+              ? `
+            <div>
+              <h4 class="font-semibold text-red-600 dark:text-red-400 mb-3">❌ Expired/Overdue</h4>
+              ${alertsData.expiredVessels
+                .map(
+                  (vessel) => `
+                <div class="mb-4 p-3 bg-red-50 dark:bg-red-900/10 rounded-lg border border-red-200 dark:border-red-800">
+                  <div class="font-medium mb-2">${escapeHtml(vessel.name)}</div>
+                  ${vessel.certs
+                    .map(
+                      (cert) => `
+                    <div class="ml-4 text-sm mb-1">
+                      • <span class="font-medium">${cert.cert}</span>: 
+                      ${cert.isIntermediate ? "Due" : "Expired"} on ${
+                        cert.expiryDate
+                      } 
+                      (${cert.daysOverdue} days overdue)
+                    </div>
+                  `
+                    )
+                    .join("")}
+                </div>
+              `
+                )
+                .join("")}
+            </div>
+          `
+              : ""
+          }
+          
+          ${
+            alertsData.comingDueVessels.length > 0
+              ? `
+            <div>
+              <h4 class="font-semibold text-amber-600 dark:text-amber-400 mb-3">⚠️ Coming Due</h4>
+              ${alertsData.comingDueVessels
+                .map(
+                  (vessel) => `
+                <div class="mb-4 p-3 bg-amber-50 dark:bg-amber-900/10 rounded-lg border border-amber-200 dark:border-amber-800">
+                  <div class="font-medium mb-2">${escapeHtml(vessel.name)}</div>
+                  ${vessel.certs
+                    .map(
+                      (cert) => `
+                    <div class="ml-4 text-sm mb-1">
+                      • <span class="font-medium">${cert.cert}</span>: 
+                      ${cert.isIntermediate ? "Due" : "Expires"} on ${
+                        cert.expiryDate
+                      } 
+                      (${cert.daysRemaining} days remaining)
+                      ${
+                        cert.daysRemaining <= 30
+                          ? '<span class="ml-2 text-red-600">❗ URGENT</span>'
+                          : ""
+                      }
+                    </div>
+                  `
+                    )
+                    .join("")}
+                </div>
+              `
+                )
+                .join("")}
+            </div>
+          `
+              : ""
+          }
+        </div>
+      </div>
+      
+      <div class="p-6 border-t border-gray-200 dark:border-gray-700 flex justify-end gap-3">
+        <button onclick="this.closest('.modal-backdrop').remove()" class="px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-700">
+          Cancel
+        </button>
+        <button onclick="sendEmailAlerts(); this.closest('.modal-backdrop').remove()" class="px-4 py-2 bg-maritime-600 text-white rounded-lg hover:bg-maritime-700">
+          ✉️ Send Email
+        </button>
+      </div>
+    </div>
+  `;
+
+        document.body.appendChild(modal);
+      }
+
+      function getAlertDetails() {
+        let expiredVessels = [];
+        let comingDueVessels = [];
+
+        vessels.forEach((vessel) => {
+          const expiredCerts = [];
+          const comingDueCerts = [];
+
+          CERTS.forEach((cert) => {
+            const certData = vessel[cert];
+            if (certData) {
+              // Check expiry
+              const expiryStatus = getDateStatus(certData.expiry, false, false);
+
+              if (expiryStatus.status === "expired") {
+                expiredCerts.push({
+                  cert: CERT_SHORT[cert],
+                  expiryDate: formatDate(certData.expiry),
+                  daysOverdue: Math.abs(expiryStatus.daysUntil),
+                  isIntermediate: false,
+                });
+              } else if (expiryStatus.status === "coming") {
+                comingDueCerts.push({
+                  cert: CERT_SHORT[cert],
+                  expiryDate: formatDate(certData.expiry),
+                  daysRemaining: expiryStatus.daysUntil,
+                  isIntermediate: false,
+                });
+              }
+
+              // Check intermediate
+              if (certData.intermediateDue && !certData.intermediateCompleted) {
+                const intermediateStatus = getDateStatus(
+                  certData.intermediateDue,
+                  true,
+                  false
+                );
+
+                if (intermediateStatus.status === "expired") {
+                  expiredCerts.push({
+                    cert: `${CERT_SHORT[cert]} Intermediate`,
+                    expiryDate: formatDate(certData.intermediateDue),
+                    daysOverdue: Math.abs(intermediateStatus.daysUntil),
+                    isIntermediate: true,
+                  });
+                } else if (intermediateStatus.status === "coming") {
+                  comingDueCerts.push({
+                    cert: `${CERT_SHORT[cert]} Intermediate`,
+                    expiryDate: formatDate(certData.intermediateDue),
+                    daysRemaining: intermediateStatus.daysUntil,
+                    isIntermediate: true,
+                  });
+                }
+              }
+            }
+          });
+
+          if (expiredCerts.length > 0) {
+            expiredVessels.push({
+              name: vessel.name,
+              certs: expiredCerts,
+            });
+          }
+
+          if (comingDueCerts.length > 0) {
+            comingDueVessels.push({
+              name: vessel.name,
+              certs: comingDueCerts,
+            });
+          }
+        });
+
+        return { expiredVessels, comingDueVessels };
       }
     </script>
     <!-- Remarks Modal -->
