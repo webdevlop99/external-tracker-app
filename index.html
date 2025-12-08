@@ -1725,9 +1725,18 @@
             const expiryDate = expiryInput.value;
 
             if (issueDate && expiryDate && !intermediateInput.value) {
-              const midpoint = calculateMidpoint(issueDate, expiryDate);
-              if (midpoint) {
-                intermediateInput.value = midpoint;
+              // Use normalizeDate to ensure consistent parsing
+              const normalizedIssue = normalizeDate(issueDate);
+              const normalizedExpiry = normalizeDate(expiryDate);
+
+              if (normalizedIssue && normalizedExpiry) {
+                const midpoint = calculateMidpoint(
+                  normalizedIssue,
+                  normalizedExpiry
+                );
+                if (midpoint) {
+                  intermediateInput.value = midpoint;
+                }
               }
             }
           };
@@ -1799,28 +1808,31 @@
 
         // Clean the string
         dateStr = dateStr.trim();
-
-        // Check if it's already in ISO format (YYYY-MM-DD)
         if (/^\d{4}-\d{2}-\d{2}$/.test(dateStr)) {
-          const date = new Date(dateStr);
-          if (!isNaN(date.getTime())) {
-            date.setHours(0, 0, 0, 0);
-            return date.toISOString().split("T")[0];
-          }
+          // Parse as local date, not UTC
+          const [year, month, day] = dateStr.split("-").map(Number);
+          const date = new Date(year, month - 1, day);
+
+          // Format back to YYYY-MM-DD without timezone issues
+          const localYear = date.getFullYear();
+          const localMonth = String(date.getMonth() + 1).padStart(2, "0");
+          const localDay = String(date.getDate()).padStart(2, "0");
+
+          return `${localYear}-${localMonth}-${localDay}`;
         }
 
-        // Try parsing DD/MM/YYYY or DD-MM-YYYY
         const dmy = dateStr.match(/^(\d{1,2})[\/\-](\d{1,2})[\/\-](\d{4})$/);
         if (dmy) {
           const day = dmy[1].padStart(2, "0");
           const month = dmy[2].padStart(2, "0");
           const year = dmy[3];
-          const isoDate = `${year}-${month}-${day}`;
-          const date = new Date(isoDate);
-          if (!isNaN(date.getTime())) {
-            date.setHours(0, 0, 0, 0);
-            return date.toISOString().split("T")[0];
-          }
+          const date = new Date(year, month - 1, day);
+
+          const localYear = date.getFullYear();
+          const localMonth = String(date.getMonth() + 1).padStart(2, "0");
+          const localDay = String(date.getDate()).padStart(2, "0");
+
+          return `${localYear}-${localMonth}-${localDay}`;
         }
 
         // Try parsing YYYY/MM/DD or YYYY-MM-DD
@@ -1829,19 +1841,23 @@
           const year = ymd[1];
           const month = ymd[2].padStart(2, "0");
           const day = ymd[3].padStart(2, "0");
-          const isoDate = `${year}-${month}-${day}`;
-          const date = new Date(isoDate);
-          if (!isNaN(date.getTime())) {
-            date.setHours(0, 0, 0, 0);
-            return date.toISOString().split("T")[0];
-          }
+          const date = new Date(year, month - 1, day);
+
+          const localYear = date.getFullYear();
+          const localMonth = String(date.getMonth() + 1).padStart(2, "0");
+          const localDay = String(date.getDate()).padStart(2, "0");
+
+          return `${localYear}-${localMonth}-${localDay}`;
         }
 
         // Try parsing with Date object (fallback)
         const date = new Date(dateStr);
         if (!isNaN(date.getTime())) {
-          date.setHours(0, 0, 0, 0);
-          return date.toISOString().split("T")[0];
+          const localYear = date.getFullYear();
+          const localMonth = String(date.getMonth() + 1).padStart(2, "0");
+          const localDay = String(date.getDate()).padStart(2, "0");
+
+          return `${localYear}-${localMonth}-${localDay}`;
         }
 
         console.warn(`Could not parse date: ${dateStr}`);
@@ -1850,9 +1866,19 @@
 
       function formatDate(dateStr) {
         if (!dateStr) return "-";
-        const date = new Date(dateStr);
+
+        // Parse as local date
+        const [year, month, day] = dateStr.split("-").map(Number);
+        const date = new Date(year, month - 1, day);
+
         if (isNaN(date.getTime())) return dateStr;
-        return date.toLocaleDateString("en-CA");
+
+        // Format back as YYYY-MM-DD for consistency
+        const localYear = date.getFullYear();
+        const localMonth = String(date.getMonth() + 1).padStart(2, "0");
+        const localDay = String(date.getDate()).padStart(2, "0");
+
+        return `${localYear}-${localMonth}-${localDay}`;
       }
 
       function formatDateForOverview(dateStr) {
@@ -1882,10 +1908,17 @@
       }
 
       function daysBetween(date1, date2) {
-        const d1 = new Date(date1);
-        const d2 = new Date(date2);
+        // Parse dates as local dates at midnight
+        const [year1, month1, day1] = date1.split("-").map(Number);
+        const [year2, month2, day2] = date2.split("-").map(Number);
+
+        const d1 = new Date(year1, month1 - 1, day1);
+        const d2 = new Date(year2, month2 - 1, day2);
+
+        // Clear time to avoid timezone issues
         d1.setHours(0, 0, 0, 0);
         d2.setHours(0, 0, 0, 0);
+
         const diff = d2.getTime() - d1.getTime();
         return Math.floor(diff / MS_IN_DAY);
       }
@@ -1893,14 +1926,25 @@
       function calculateMidpoint(startStr, endStr) {
         if (!startStr || !endStr) return null;
 
-        const start = new Date(startStr);
-        const end = new Date(endStr);
+        // Parse dates as local
+        const [startYear, startMonth, startDay] = startStr
+          .split("-")
+          .map(Number);
+        const [endYear, endMonth, endDay] = endStr.split("-").map(Number);
+
+        const start = new Date(startYear, startMonth - 1, startDay);
+        const end = new Date(endYear, endMonth - 1, endDay);
 
         if (isNaN(start.getTime()) || isNaN(end.getTime())) return null;
 
         const midpoint = new Date((start.getTime() + end.getTime()) / 2);
-        midpoint.setHours(0, 0, 0, 0);
-        return midpoint.toISOString().split("T")[0];
+
+        // Format as local date
+        const localYear = midpoint.getFullYear();
+        const localMonth = String(midpoint.getMonth() + 1).padStart(2, "0");
+        const localDay = String(midpoint.getDate()).padStart(2, "0");
+
+        return `${localYear}-${localMonth}-${localDay}`;
       }
 
       // ============================================================================
@@ -1953,7 +1997,7 @@
           };
         }
 
-        // Coming due (within 183 days)
+        // Coming due (within 90 days)
         if (daysUntil <= WARNING_DAYS) {
           const labelText = daysUntil === 0 ? "Today" : `${daysUntil} days`;
           return {
@@ -2930,18 +2974,21 @@
         // Update submit button text
         document.getElementById("submitText").textContent = "Update Vessel";
 
-        // Fill certification data
+        // Fill certification data - format for date inputs (YYYY-MM-DD)
         CERTS.forEach((cert) => {
           const certData = vessel[cert] || {};
-          document.getElementById(`${cert}-issue`).value = certData.issue || "";
+
+          // Use formatDate to ensure proper format for date inputs
+          document.getElementById(`${cert}-issue`).value =
+            formatDate(certData.issue) || "";
           document.getElementById(`${cert}-expiry`).value =
-            certData.expiry || "";
+            formatDate(certData.expiry) || "";
           document.getElementById(`${cert}-intermediateDue`).value =
-            certData.intermediateDue || "";
+            formatDate(certData.intermediateDue) || "";
           document.getElementById(`${cert}-intermediateCompleted`).checked =
             certData.intermediateCompleted || false;
 
-          // Trigger auto-calculation if intermediate is empty
+          // Don't auto-calculate during edit unless field is empty
           if (!certData.intermediateDue && certData.issue && certData.expiry) {
             const midpoint = calculateMidpoint(certData.issue, certData.expiry);
             if (midpoint) {
@@ -4024,4 +4071,3 @@
     </div>
   </body>
 </html>
-
