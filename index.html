@@ -553,7 +553,7 @@
               >
                 <div class="flex items-center justify-between">
                   <div>
-                    <p class="text-sm font-medium">Coming Due (≤90 days)</p>
+                    <p class="text-sm font-medium">Coming Due (≤183 days)</p>
                     <p class="text-3xl font-bold mt-2" id="countComing">0</p>
                   </div>
                   <div class="text-2xl">⚠️</div>
@@ -1185,7 +1185,7 @@
       const TODAY = new Date();
       TODAY.setHours(0, 0, 0, 0);
       const MS_IN_DAY = 1000 * 60 * 60 * 24;
-      const WARNING_DAYS = 90;
+      const WARNING_DAYS = 183;
 
       // Password to show hidden import/export section
       const SECTION_PASSWORD = "show123";
@@ -1953,7 +1953,7 @@
           };
         }
 
-        // Coming due (within 90 days)
+        // Coming due (within 183 days)
         if (daysUntil <= WARNING_DAYS) {
           const labelText = daysUntil === 0 ? "Today" : `${daysUntil} days`;
           return {
@@ -3478,7 +3478,7 @@
         doc.setTextColor(0, 128, 0);
         doc.text(`✓ Fully Compliant: ${counts.valid}`, 14, 58);
         doc.setTextColor(255, 165, 0);
-        doc.text(`⚠ Coming Due (≤90 days): ${counts.coming}`, 14, 65);
+        doc.text(`⚠ Coming Due (≤183 days): ${counts.coming}`, 14, 65);
         doc.setTextColor(255, 0, 0);
         doc.text(`✗ Expired/Overdue: ${counts.expired}`, 14, 72);
         doc.setTextColor(0, 0, 0);
@@ -4024,3 +4024,4 @@
     </div>
   </body>
 </html>
+
